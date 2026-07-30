@@ -1,0 +1,26 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Node/React
+frontend/node_modules/
+frontend/dist/
+
+# EEG data cache (MNE/MOABB download large datasets locally — never commit these)
+mne_data/
+*.edf
+*.bdf
+*.gdf
+*.fif
+*.set
+*.mat
+
+# OS/editor junk
+.DS_Store
+.vscode/
+*.log
+
+# Temp session data your backend creates
+/tmp/

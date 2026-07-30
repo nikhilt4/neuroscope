@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+python-dotenv
+python-multipart
+aiofiles
+mne
+mne-bids
+moabb
+openneuro-py
+braindecode
+torch
+scipy
+numpy
+pandas
+h5py
+scikit-learn
