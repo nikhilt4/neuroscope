@@ -1,4 +1,3 @@
-from aiohttp import request
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from typing import Optional, List, Dict, Any
@@ -25,7 +24,7 @@ from backend.core.detector import detect_capabilities
 from backend.core.presets import get_preset
 
 from backend.utils.file_utils import detect_format, save_temp_file, save_temp_files, detect_multi_format, cleanup_session
-from backend.utils.session_registry import get_external_bids_root, register_external_bids_root
+from backend.utils.session_registry import get_session, register_session, get_external_bids_root, register_external_bids_root
 
 from backend.models import UploadResponse, ColumnMapping, VariableMapping, DatasetFetchRequest, BidsSelection
 
@@ -107,10 +106,10 @@ def _get_session_file(session_id: str) -> Path:
     if not session_dir.exists():
         raise HTTPException(status_code=404, detail="Session not found or expired.")
 
-    files = [f for f in session_dir.iterdir() if f.is_file()]
+    files = [f for f in session_dir.iterdir()
+             if f.is_file() and f.name != "session.json"]   # exclude metadata
     if not files:
         raise HTTPException(status_code=404, detail="No file found for this session.")
-
     return files[0]
 
 
@@ -134,6 +133,14 @@ async def upload_single(file: UploadFile = File(...)):
         except Exception as e:
             cleanup_session(session_id)
             raise HTTPException(status_code=500, detail=f"Failed to inspect file: {str(e)}")
+
+        register_session(
+            session_id,
+            source="upload",
+            format=file_format,
+            file_path=str(file_path),
+            is_ready=False
+        )
 
         return UploadResponse(
             session_id=session_id,
@@ -162,6 +169,14 @@ async def upload_single(file: UploadFile = File(...)):
         except Exception as e:
             cleanup_session(session_id)
             raise HTTPException(status_code=500, detail=f"Failed to inspect MAT file: {str(e)}")
+        
+        register_session(
+            session_id,
+            source="upload",
+            format=file_format,
+            file_path=str(file_path),
+            is_ready=False
+        )
 
         return UploadResponse(
             session_id=session_id,
@@ -203,6 +218,15 @@ async def upload_single(file: UploadFile = File(...)):
     except Exception as e:
         cleanup_session(session_id)
         raise HTTPException(status_code=500, detail=f"Failed to detect capabilities: {str(e)}")
+    
+    register_session(
+        session_id,
+        source="upload",
+        format=file_format,
+        file_path=str(file_path),
+        capabilities=capabilities,
+        is_ready=True
+    )
 
     return _build_full_response(session_id, file_format, capabilities)
 
@@ -242,6 +266,15 @@ async def upload_multi(files: List[UploadFile] = File(...)):
         except Exception as e:
             cleanup_session(session_id)
             raise HTTPException(status_code=500, detail=f"Failed to detect capabilities: {str(e)}")
+        
+        register_session(
+            session_id,
+            source="upload",
+            format="brainvision",
+            file_path=str(vhdr_path),
+            capabilities=capabilities,
+            is_ready=True
+        )
 
         return _build_full_response(session_id, "brainvision", capabilities)
 
@@ -264,11 +297,7 @@ async def configure_upload(config: ColumnMapping):
     if not session_dir.exists():
         raise HTTPException(status_code=404, detail="Session not found or expired.")
 
-    # find the saved file
-    files = [f for f in session_dir.iterdir() if f.is_file()]
-    if not files:
-        raise HTTPException(status_code=404, detail="No file found for this session.")
-    file_path = files[0]
+    file_path = _get_session_file(config.session_id)
 
     file_format = detect_format(file_path.name)
 
@@ -297,6 +326,16 @@ async def configure_upload(config: ColumnMapping):
         capabilities = detect_capabilities(mne_obj)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to detect capabilities: {str(e)}")
+    
+    register_session(
+        config.session_id,
+        source="upload",
+        format=file_format,
+        file_path=str(file_path),
+        column_mapping=config.model_dump(),
+        capabilities=capabilities,
+        is_ready=True
+    )
 
     return _build_full_response(config.session_id, file_format, capabilities)
 
@@ -310,10 +349,7 @@ async def configure_mat(config: VariableMapping):
     if not session_dir.exists():
         raise HTTPException(status_code=404, detail="Session not found or expired.")
 
-    files = [f for f in session_dir.iterdir() if f.is_file()]
-    if not files:
-        raise HTTPException(status_code=404, detail="No file found for this session.")
-    file_path = files[0]
+    file_path = _get_session_file(config.session_id)
 
     try:
         mne_obj = load_mat(file_path, config)
@@ -326,6 +362,16 @@ async def configure_mat(config: VariableMapping):
         capabilities = detect_capabilities(mne_obj)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to detect capabilities: {str(e)}")
+    
+    register_session(
+        config.session_id,
+        source="upload",
+        format="mat",
+        file_path=str(file_path),
+        variable_mapping=config.model_dump(),
+        capabilities=capabilities,
+        is_ready=True
+    )
 
     return _build_full_response(config.session_id, "mat", capabilities)
 
@@ -363,6 +409,13 @@ async def upload_bids(file: UploadFile = File(...)):
     except HTTPException:
         cleanup_session(session_id)
         raise
+    
+    register_session(
+        session_id,
+        source="bids",
+        bids_root=str(bids_root),
+        is_ready=False
+        )
 
     return UploadResponse(
         session_id=session_id,
@@ -419,8 +472,20 @@ async def configure_bids(selection: BidsSelection):
         raise
 
     capabilities = detect_capabilities(raw)
-
+    
+    register_session(
+        selection.session_id,
+        source="bids",
+        bids_root=str(bids_root),
+        subject=selection.subject,
+        task=selection.task,
+        session=selection.session,
+        run=selection.run,
+        capabilities=capabilities,
+        is_ready=True,
+    )
     return _build_full_response(selection.session_id, "bids", capabilities)
+
 
 
 # ── Dataset routes (stubs for later) ─────────────────────────────────────────
@@ -443,12 +508,21 @@ async def list_datasets(source: str):
 @router.post("/dataset/fetch")
 async def fetch_dataset(request: DatasetFetchRequest, background_tasks: BackgroundTasks):
     session_id = str(uuid.uuid4())
-
+    effective_runs = request.runs
+    
     try:       
         if request.source == "mne" and request.dataset_name == "erp_core":
             result = fetch_mne_dataset("erp_core", request.subjects)
             entities = result["entities"]
-            register_external_bids_root(session_id, result["bids_root"])
+            
+            register_session(
+                session_id,
+                source="bids",
+                bids_root=str(result["bids_root"]),
+                dataset_name="erp_core",
+                subjects=request.subjects,
+                is_ready=False,
+            )
 
             return UploadResponse(
                 session_id=session_id,
@@ -471,7 +545,11 @@ async def fetch_dataset(request: DatasetFetchRequest, background_tasks: Backgrou
             )
 
         elif request.source == "mne":
-            raw = fetch_mne_dataset(request.dataset_name, request.subjects, request.runs)
+            effective_runs = request.runs
+            if request.dataset_name == "eegbci" and not effective_runs:
+                from backend.fetchers.mne_fetcher import MNE_DATASETS
+                effective_runs = MNE_DATASETS["eegbci"]["runs"]["left_right_hand"]
+            raw = fetch_mne_dataset(request.dataset_name, request.subjects, effective_runs)
 
         elif request.source == "moabb":
             raw = fetch_moabb_dataset(request.dataset_name, request.subjects)
@@ -479,7 +557,14 @@ async def fetch_dataset(request: DatasetFetchRequest, background_tasks: Backgrou
         elif request.source == "openneuro":
             bids_root = fetch_openneuro_dataset(request.dataset_name, session_id)
             entities = scan_bids_entities(bids_root)
-            register_external_bids_root(session_id, bids_root)
+            
+            register_session(
+                session_id,
+                source="bids",
+                bids_root=str(bids_root),
+                dataset_name=request.dataset_name,
+                is_ready=False,
+            )
 
             return UploadResponse(
                 session_id=session_id,
@@ -518,7 +603,16 @@ async def fetch_dataset(request: DatasetFetchRequest, background_tasks: Backgrou
         capabilities = detect_capabilities(raw)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to detect capabilities: {str(e)}")
-
+    
+    register_session(
+        session_id,
+        source=request.source,
+        dataset_name=request.dataset_name,
+        subjects=request.subjects,
+        runs=getattr(request, "runs", None),
+        capabilities=capabilities,
+        is_ready=True,
+    )
     return _build_full_response(session_id, request.dataset_name, capabilities, source=request.source)
 
 @router.get("/dataset/fetch/progress/{session_id}")

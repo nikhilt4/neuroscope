@@ -5,6 +5,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from backend.routes.upload import router as upload_router
+from backend.routes.analyze import router as analyze_router
+import mne
+
+mne.set_log_level("WARNING")   # suppresses CSP's per-fold rank/covariance spam
 
 
 #FastAPI app instance
@@ -21,6 +25,7 @@ app.add_middleware(
 
 
 app.include_router(upload_router)
+app.include_router(analyze_router)
 
 @app.get("/")
 async def root():

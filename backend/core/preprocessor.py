@@ -4,6 +4,107 @@ from typing import Optional, Union
 from fastapi import HTTPException
 
 
+def _apply_montage(raw: mne.io.Raw, montage: Optional[str]) -> mne.io.Raw:
+    """
+    Attaches electrode positions. Needed for topomaps and any position-aware
+    step later; harmless for classification itself.
+    on_missing="warn" so a few unmatched channel names degrade gracefully
+    rather than killing the whole run.
+    """
+    if not montage:
+        return raw
+    try:
+        raw.set_montage(montage, on_missing="warn", verbose=False)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not apply montage '{montage}': {str(e)}"
+        )
+    return raw
+
+
+def _rename_annotations(raw: mne.io.Raw, mapping: Optional[dict]) -> mne.io.Raw:
+    """
+    Renames raw annotation descriptions (e.g. eegbci's T1/T2 -> left_hand/right_hand).
+    Only renames keys actually present — MNE raises on unknown descriptions,
+    and a preset shouldn't be able to break a file it partially matches.
+    """
+    if not mapping:
+        return raw
+    if any(isinstance(v, dict) for v in mapping.values()):
+        raise HTTPException(
+            status_code=500,
+            detail="annotation_rename is still nested — call resolve_annotation_rename() first."
+        )
+    if raw.annotations is None or len(raw.annotations) == 0:
+        return raw
+
+    present = set(raw.annotations.description)
+    applicable = {k: v for k, v in mapping.items() if k in present}
+    if applicable:
+        raw.annotations.rename(applicable)
+    return raw
+
+
+def _extract_events(raw: mne.io.Raw, include_events: Optional[list] = None):
+    """
+    Pulls events from a stim channel if present, else from annotations.
+    include_events restricts to named classes — this is what keeps 'rest'
+    out of an otherwise-binary motor imagery task.
+    """
+    events = None
+    try:
+        events = mne.find_events(raw, verbose=False)
+    except Exception:
+        events = None
+
+    if events is not None and len(events) > 0:
+        event_id = {str(uid): int(uid) for uid in sorted(set(events[:, 2]))}
+        if include_events:
+            event_id = {k: v for k, v in event_id.items() if k in include_events}
+            if not event_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"None of {include_events} found in stim channel. "
+                           f"Available codes: {sorted(set(events[:, 2]))}"
+                )
+            keep = set(event_id.values())
+            events = events[np.isin(events[:, 2], list(keep))]
+        return events, event_id
+
+    available = sorted(set(raw.annotations.description)) if raw.annotations is not None else []
+    try:
+        if include_events:
+            requested = {name: i + 1 for i, name in enumerate(include_events)}
+            return mne.events_from_annotations(raw, event_id=requested, verbose=False)
+        return mne.events_from_annotations(raw, verbose=False)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not extract events: {str(e)}. Available annotations: {available}"
+        )
+
+
+def _crop_epochs(epochs: mne.Epochs, crop: Optional[tuple]) -> mne.Epochs:
+    """
+    Restricts each epoch to an analysis window inside the epoching window.
+    For eegbci this is (1.0, 2.0) — excludes the cue-evoked response so CSP
+    sees imagery-period variance rather than the visual response.
+    """
+    if not crop:
+        return epochs
+    tmin, tmax = crop
+    if tmin < epochs.tmin or tmax > epochs.tmax:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Analysis window ({tmin}, {tmax}) falls outside the epoch "
+                   f"window ({epochs.tmin}, {epochs.tmax})."
+        )
+    return epochs.crop(tmin=tmin, tmax=tmax)
+
+
+
+
 def preprocess_raw(
     raw: mne.io.Raw,
     config: dict,
@@ -21,6 +122,9 @@ def preprocess_raw(
     """
     try:
         raw = raw.copy()  # never mutate the caller's original Raw object
+        
+        raw = _apply_montage(raw, config.get("montage"))                    # NEW
+        raw = _rename_annotations(raw, config.get("annotation_rename"))     # NEW
 
         # 1. Bandpass filter
         bandpass_low = config.get("bandpass_low")
@@ -48,7 +152,15 @@ def preprocess_raw(
         tmax = config.get("epoch_tmax", 0.8)
         baseline = config.get("baseline") if config.get("baseline_enabled") else None
 
-        epochs = _epoch_raw(raw, tmin, tmax, baseline, events=events, event_id=event_id)
+        epochs = _epoch_raw(
+            raw, tmin, tmax, baseline,
+            events=events, event_id=event_id,
+            include_events=config.get("include_events"),                    # NEW
+            picks=config.get("picks", "eeg")                               # NEW
+        )
+        
+        
+        epochs = _crop_epochs(epochs, config.get("epoch_train_crop"))
 
         return epochs
 
@@ -82,10 +194,13 @@ def _apply_reference(raw: mne.io.Raw, reference: Union[str, list]) -> mne.io.Raw
     """
     Re-references the EEG data.
     reference: "average" for common average reference,
-               or a list of channel names (e.g. ["P9", "P10"]) for a specific reference.
+               a single channel name string (e.g. "Cz"),
+               or a list of channel names (e.g. ["P9", "P10"]).
     """
     if reference == "average":
         raw.set_eeg_reference(ref_channels="average", projection=False, verbose=False)
+    elif isinstance(reference, str):
+        raw.set_eeg_reference(ref_channels=[reference], verbose=False)
     elif isinstance(reference, list):
         raw.set_eeg_reference(ref_channels=reference, verbose=False)
     else:
@@ -114,25 +229,18 @@ def _apply_ica(raw: mne.io.Raw, n_components: int) -> mne.io.Raw:
 
 
 def _epoch_raw(
-    raw: mne.io.Raw,
-    tmin: float,
-    tmax: float,
-    baseline: Optional[tuple],
-    events: Optional[np.ndarray] = None,
-    event_id: Optional[dict] = None,
+    raw, tmin, tmax, baseline,
+    events=None, event_id=None,
+    include_events=None,
+    picks="eeg",
 ) -> mne.Epochs:
-    """
-    Epochs the continuous Raw data around events.
-    Uses provided events/event_id if given; otherwise extracts them internally
-    as a fallback (tries find_events first, then events_from_annotations).
-    """
     if events is None or event_id is None:
-        try:
-            events = mne.find_events(raw, verbose=False)
-            unique_ids = sorted(set(events[:, 2]))
-            event_id = {str(uid): uid for uid in unique_ids}
-        except Exception:
-            events, event_id = mne.events_from_annotations(raw, verbose=False)
+        events, event_id = _extract_events(raw, include_events)
+    elif include_events:
+        event_id = {k: v for k, v in event_id.items() if k in include_events}
+        if not event_id:
+            raise HTTPException(status_code=400, detail=f"None of {include_events} in supplied event_id.")
+        events = events[np.isin(events[:, 2], list(event_id.values()))]
 
     if len(events) == 0:
         raise HTTPException(
@@ -140,15 +248,9 @@ def _epoch_raw(
             detail="No events found — cannot epoch this data. Check event/annotation setup."
         )
 
-    epochs = mne.Epochs(
-        raw,
-        events=events,
-        event_id=event_id,
-        tmin=tmin,
-        tmax=tmax,
-        baseline=baseline,
-        preload=True,
-        verbose=False,
+    return mne.Epochs(
+        raw, events=events, event_id=event_id,
+        tmin=tmin, tmax=tmax, baseline=baseline,
+        picks=picks,          # keeps EOG/ECG/STI out of the feature pipeline
+        preload=True, verbose=False,
     )
-
-    return epochs

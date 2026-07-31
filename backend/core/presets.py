@@ -1,4 +1,6 @@
 from typing import Optional
+from fastapi import HTTPException
+
 
 # Presets keyed by dataset_name (specific) or mode (generic fallback)
 # Specific dataset presets take priority over mode-based generic ones
@@ -18,6 +20,7 @@ DATASET_PRESETS = {
             "hands_feet_runs": {"T1": "hands", "T2": "feet"},
             "left_right_runs": {"T1": "left_hand", "T2": "right_hand"},
         },
+        "include_events": ["left_hand", "right_hand"],
         "montage": "standard_1005",
     },
 
@@ -139,6 +142,34 @@ MODE_PRESETS = {
         "ica_enabled": False,
     },
 }
+
+EEGBCI_RUN_VARIANTS = {
+    frozenset([4, 8, 12]): "left_right_runs",
+    frozenset([6, 10, 14]): "hands_feet_runs",
+}
+
+def resolve_annotation_rename(preset: dict, runs: Optional[list] = None) -> dict:
+    """
+    Flattens a nested annotation_rename into a plain {old: new} mapping.
+    eegbci is the only dataset needing this — T1/T2 mean different things
+    depending on which runs were fetched, so the mapping can't be resolved
+    until run selection is known.
+    """
+    mapping = preset.get("annotation_rename")
+    if not mapping:
+        return {}
+    if not any(isinstance(v, dict) for v in mapping.values()):
+        return mapping                      # already flat
+
+    variant = EEGBCI_RUN_VARIANTS.get(frozenset(runs or []))
+    if variant is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot resolve annotation labels for runs {runs} — "
+                   f"expected [4,8,12] (left/right hand) or [6,10,14] (hands/feet)."
+        )
+    return mapping[variant]
+
 
 
 def get_preset(dataset_name: Optional[str], mode: str, task: Optional[str] = None) -> dict:

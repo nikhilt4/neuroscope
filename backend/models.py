@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional, List, Dict
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any, Union, Tuple
 
 
 class ColumnMapping(BaseModel):
@@ -56,3 +56,43 @@ class BidsSelection(BaseModel):
     task: Optional[str] = None
     session: Optional[str] = None
     run: Optional[str] = None
+
+
+class PreprocessingConfig(BaseModel):
+    """
+    All fields optional — omitted ones fall through to the dataset/mode preset.
+    exclude_unset=True in the route means only what the user actually touched
+    overrides the preset.
+    """
+    bandpass_low: Optional[float] = None
+    bandpass_high: Optional[float] = None
+    notch_enabled: Optional[bool] = None
+    notch_freq: Optional[float] = None
+    reference: Optional[Union[str, List[str]]] = None
+    ica_enabled: Optional[bool] = None
+    ica_components: Optional[int] = None
+    epoch_tmin: Optional[float] = None
+    epoch_tmax: Optional[float] = None
+    baseline_enabled: Optional[bool] = None
+    baseline: Optional[Tuple[Optional[float], Optional[float]]] = None
+    epoch_train_crop: Optional[Tuple[float, float]] = None
+    include_events: Optional[List[str]] = None
+    montage: Optional[str] = None
+    picks: Optional[str] = None
+
+
+class ClassifierConfig(BaseModel):
+    selected: List[str] = Field(default_factory=lambda: ["lda", "svm"])
+    n_folds: int = Field(5, ge=2, le=20)
+    csp_components: int = Field(4, ge=1, le=32)
+    csp_reg: Optional[Union[str, float]] = None
+    # keyed by classifier name; each builder applies its own defaults for
+    # anything absent, so this can be {} for a plain run
+    configs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+
+
+class AnalysisRequest(BaseModel):
+    session_id: str
+    mode: str = "motor_imagery"
+    preprocessing: Optional[PreprocessingConfig] = None
+    classifiers: ClassifierConfig = Field(default_factory=ClassifierConfig)

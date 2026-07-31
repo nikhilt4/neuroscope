@@ -65,7 +65,7 @@ def fetch_mne_dataset(dataset_name: str, subjects: list, runs: list = None):
     try:
         if dataset_name == "eegbci":
             run_list = runs or MNE_DATASETS["eegbci"]["runs"]["left_right_hand"]
-            raw_fnames = eegbci.load_data(subject=subject, runs=run_list, verbose=False)
+            raw_fnames = eegbci.load_data(subjects=subject, runs=run_list, update_path=True, verbose=False)
             raws = [mne.io.read_raw_edf(f, preload=True, verbose=False) for f in raw_fnames]
             raw = mne.concatenate_raws(raws)
             eegbci.standardize(raw)
@@ -100,13 +100,13 @@ def fetch_mne_dataset(dataset_name: str, subjects: list, runs: list = None):
 
         elif dataset_name == "limo":
             from mne.datasets import limo
-            epochs = limo.load_data(subject=subject, verbose=False)
+            epochs = limo.load_data(subject=subject, update_path=True, verbose=False)
             return epochs  # this one returns Epochs directly, not Raw
 
         elif dataset_name == "kiloword":
             from mne.datasets import kiloword
-            data_path_list = kiloword.data_path(verbose=False)
-            data_dir = data_path_list[0]  # docs confirm: returned as a list of length one
+            result = kiloword.data_path(update_path=True, verbose=False)
+            data_dir = Path(result[0]) if isinstance(result, (list, tuple)) else Path(result)
 
             # Filename not documented anywhere I could verify — search for the .fif file
             # rather than hardcoding a guessed name
