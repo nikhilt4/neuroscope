@@ -24,6 +24,18 @@ function ChooseSection({ data, onModeSelected, selectedMode }) {
         </div>
       </div>
 
+      {data.motor_channels && (
+        <p className="hint-text">
+          Motor channels detected:{" "}
+          {Object.entries(data.motor_channels)
+            .filter(([, present]) => present)
+            .map(([ch]) => ch)
+            .join(", ") || "none"}
+          {!data.available_modes.includes("motor_imagery") &&
+            " — motor imagery needs at least two of C3/C4/Cz."}
+        </p>
+          )}
+
       <h3 className="subheading">Choose Analysis Mode</h3>
       <div className="mode-row">
         {data.available_modes.map((mode) => (

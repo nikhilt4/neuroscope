@@ -1,8 +1,11 @@
 import { useState } from "react";
 import ColumnPicker from "./ColumnPicker";
+import DatasetPicker from "./DatasetPicker";
 
-const API_BASE = "http://127.0.0.1:8000";
-const UPLOAD_TYPES = ["Single", "Multiple", "BIDS"];
+// const API_BASE = "http://127.0.0.1:8000";
+import * as api from "../api";
+
+const UPLOAD_TYPES = ["Single", "Multiple", "Public Dataset", "BIDS"];
 
 function UploadSection({ onReady }) {
   const [uploadType, setUploadType] = useState("Single");
@@ -22,25 +25,14 @@ function UploadSection({ onReady }) {
     setIsUploading(true);
     setError(null);
 
-    const formData = new FormData();
-    const endpoint = uploadType === "Single" ? "/upload/single" : "/upload/multi";
-
-    if (uploadType === "Single") {
-      formData.append("file", selectedFiles[0]);
-    } else {
-      selectedFiles.forEach((f) => formData.append("files", f));
-    }
-
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Upload failed");
+      const data = uploadType === "Single"
+        ? await api.uploadSingle(selectedFiles[0])
+        : await api.uploadMulti(selectedFiles);
 
       setUploadData(data);
-      if (!data.needs_column_picker) {
+      // MAT files need the variable picker, same round-trip shape as CSV
+      if (!data.needs_column_picker && !data.needs_variable_picker) {
         onReady(data);
       }
     } catch (err) {
@@ -71,32 +63,41 @@ function UploadSection({ onReady }) {
         ))}
       </div>
 
-      <div className="upload-box">
-        <input
-          type="file"
-          multiple={uploadType === "Multiple"}
-          onChange={handleFileChange}
-          accept=".edf,.bdf,.gdf,.fif,.vhdr,.vmrk,.eeg,.mat,.csv,.tsv"
-        />
-        {selectedFiles.length > 0 && (
-          <p className="file-list">
-            {selectedFiles.map((f) => f.name).join(", ")}
-          </p>
-        )}
-      </div>
+      {uploadType === "Public Dataset" ? (
+        <DatasetPicker onReady={onReady} />
+      ) : (
+        <>
+          <div className="upload-box">
+            <input
+              type="file"
+              multiple={uploadType === "Multiple"}
+              onChange={handleFileChange}
+              accept=".edf,.bdf,.gdf,.fif,.vhdr,.vmrk,.eeg,.mat,.csv,.tsv"
+            />
+            {selectedFiles.length > 0 && (
+              <p className="file-list">{selectedFiles.map((f) => f.name).join(", ")}</p>
+            )}
+          </div>
 
-      <button
-        className="primary-btn"
-        onClick={handleUpload}
-        disabled={selectedFiles.length === 0 || isUploading}
-      >
-        {isUploading ? "Uploading..." : "Upload"}
-      </button>
+          <button
+            className="primary-btn"
+            onClick={handleUpload}
+            disabled={selectedFiles.length === 0 || isUploading}
+          >
+            {isUploading ? "Uploading..." : "Upload"}
+          </button>
 
-      {error && <div className="error-box">{error}</div>}
+          {error && <div className="error-box">{error}</div>}
 
-      {uploadData?.needs_column_picker && (
-        <ColumnPicker uploadData={uploadData} onConfigured={onReady} />
+          {uploadData?.needs_column_picker && (
+            <ColumnPicker uploadData={uploadData} onConfigured={onReady} />
+          )}
+          {uploadData?.needs_variable_picker && (
+            <p className="error-box">
+              MAT files need a variable picker, which isn't built yet.
+            </p>
+          )}
+        </>
       )}
     </div>
   );
