@@ -3,10 +3,39 @@ import * as api from "../api";
 import BidsSelector from "./BidsSelector";
 
 const SOURCES = [
-  { id: "mne", label: "MNE", hint: "Built-in reference datasets" },
-  { id: "moabb", label: "MOABB", hint: "BCI benchmark datasets" },
-  { id: "braindecode", label: "Braindecode", hint: "Deep-learning benchmarks" },
+  { id: "mne", label: "MNE", hint: "Reference datasets bundled with MNE-Python" },
+  { id: "moabb", label: "MOABB", hint: "Standard BCI benchmark datasets" },
+  { id: "braindecode", label: "Braindecode", hint: "Datasets formatted for deep learning" },
 ];
+
+// Download sizes and caveats aren't in the backend metadata, and they matter a
+// lot — a synchronous fetch of a multi-hundred-MB dataset looks like a hang.
+const DATASET_NOTES = {
+  eegbci: { size: "~20 MB", speed: "fast",
+            link: "https://physionet.org/content/eegmmidb/1.0.0/" },
+  sleep_physionet: { size: "~250 MB", speed: "slow",
+            warn: "Downlod is currently unreliable - may hang. Use another dataset if possible.",
+            link: "https://physionet.org/content/sleep-edfx/1.0.0/" },
+  ssvep: { size: "~100 MB", speed: "medium", warn: "Untested fetch path." },
+  erp_core: { size: "~1 GB", speed: "slow",
+            warn: "BIDS dataset — needs a second selection step after download.",
+            link: "https://osf.io/thsqg/" },
+  limo: { size: "~700 MB", speed: "slow", warn: "Downloads per subject." },
+  kiloword: { size: "~40 MB", speed: "fast", warn: "Untested fetch path." },
+  BNCI2014_001: { size: "~500 MB", speed: "slow",
+            link: "https://www.bbci.de/competition/iv/" },
+  BNCI2014_002: { size: "~600 MB", speed: "slow" },
+  Zhou2016: { size: "~200 MB", speed: "medium" },
+  Schirrmeister2017: { size: "~10 GB", speed: "slow",
+            warn: "Very large — expect a long download." },
+};
+
+const TASK_LABELS = {
+  motor_imagery: "Motor Imagery",
+  spectral: "Spectral / Sleep",
+  erp: "ERP",
+  ssvep: "SSVEP",
+};
 
 function DatasetPicker({ onReady }) {
   const [source, setSource] = useState("mne");
@@ -22,6 +51,7 @@ function DatasetPicker({ onReady }) {
   useEffect(() => {
     setIsLoading(true);
     setSelected(null);
+    setBidsData(null);
     setError(null);
     api
       .listDatasets(source)
@@ -33,8 +63,10 @@ function DatasetPicker({ onReady }) {
   const chooseDataset = (ds) => {
     setSelected(ds);
     setSubject(1);
-    // eegbci's run groups mean different tasks — [4,8,12] is left/right hand,
-    // [6,10,14] is hands/feet. The backend can't infer which was intended.
+    setBidsData(null);
+    setError(null);
+    // eegbci's run groups are different tasks: [4,8,12] left/right hand,
+    // [6,10,14] hands/feet. The backend can't infer which was meant.
     setRunVariant(ds.runs ? Object.keys(ds.runs)[0] : null);
   };
 
@@ -47,12 +79,9 @@ function DatasetPicker({ onReady }) {
         dataset_name: selected.id,
         subjects: [Number(subject)],
       };
-      if (selected.runs && runVariant) {
-        payload.runs = selected.runs[runVariant];
-      }
+      if (selected.runs && runVariant) payload.runs = selected.runs[runVariant];
+
       const data = await api.fetchDataset(payload);
-      // BIDS-format datasets (erp_core, OpenNeuro) need a second round trip
-      // to pick subject/task/run before they're analysable
       if (data.needs_bids_selection) {
         setBidsData(data);
         return;
@@ -65,81 +94,122 @@ function DatasetPicker({ onReady }) {
     }
   };
 
+  const notes = selected ? DATASET_NOTES[selected.id] || {} : {};
+
   return (
     <div>
       <div className="source-row">
         {SOURCES.map((s) => (
           <button
             key={s.id}
-            className={`mode-btn ${source === s.id ? "mode-btn-active" : ""}`}
+            className={`source-btn ${source === s.id ? "source-btn-active" : ""}`}
             onClick={() => setSource(s.id)}
-            title={s.hint}
           >
-            {s.label}
+            <span className="source-label">{s.label}</span>
+            <span className="source-hint">{s.hint}</span>
           </button>
         ))}
       </div>
 
       {isLoading && <p className="placeholder-text">Loading datasets…</p>}
 
-      <div className="dataset-list">
-        {datasets.map((ds) => (
-          <div
-            key={ds.id}
-            className={`dataset-card ${selected?.id === ds.id ? "dataset-card-active" : ""}`}
-            onClick={() => chooseDataset(ds)}
-          >
-            <div className="dataset-name">{ds.name || ds.id}</div>
-            {ds.description && <div className="dataset-desc">{ds.description}</div>}
-            <div className="dataset-meta">
-              {ds.n_subjects && <span>{ds.n_subjects} subjects</span>}
-              {ds.task && <span>{ds.task.replace("_", " ")}</span>}
-              {ds.n_channels && <span>{ds.n_channels} ch</span>}
+      <div className="dataset-grid">
+        {datasets.map((ds) => {
+          const n = DATASET_NOTES[ds.id] || {};
+          return (
+            <div
+              key={ds.id}
+              className={`dataset-card ${selected?.id === ds.id ? "dataset-card-active" : ""}`}
+              onClick={() => chooseDataset(ds)}
+            >
+              <div className="dataset-card-top">
+                <span className="dataset-name">{ds.name || ds.id}</span>
+                {ds.task && (
+                  <span className="dataset-tag">{TASK_LABELS[ds.task] || ds.task}</span>
+                )}
+              </div>
+
+              {ds.description && <p className="dataset-desc">{ds.description}</p>}
+
+              <div className="dataset-meta">
+                {ds.n_subjects && <span>{ds.n_subjects} subjects</span>}
+                {(ds.n_eeg_channels || ds.n_channels) && (
+                  <span>{ds.n_eeg_channels || ds.n_channels} channels</span>
+                )}
+                {ds.sampling_rate && <span>{ds.sampling_rate} Hz</span>}
+                {n.size && <span className={`size-tag size-${n.speed}`}>{n.size}</span>}
+              </div>
+
+              {ds.classes && (
+                <div className="dataset-classes">
+                  {ds.classes.map((c) => (
+                    <span key={c} className="class-pill">{c.replace(/_/g, " ")}</span>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {selected && (
-        <div className="config-group" style={{ marginTop: 20 }}>
+        <div className="fetch-panel">
           <h4>{selected.name || selected.id}</h4>
-          <div className="config-row">
-            <label>Subject</label>
-            <input
-              type="number"
-              min="1"
-              max={selected.n_subjects || 999}
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-            />
-          </div>
-          {selected.runs && (
-            <div className="config-row">
-              <label>Task</label>
-              <select value={runVariant} onChange={(e) => setRunVariant(e.target.value)}>
-                {Object.keys(selected.runs).map((key) => (
-                  <option key={key} value={key}>{key.replace(/_/g, " ")}</option>
-                ))}
-              </select>
+
+          {notes.warn && <p className="dataset-warn">{notes.warn}</p>}
+
+          <div className="fetch-row">
+            <div className="fetch-field">
+              <label>Subject</label>
+              <input
+                type="number"
+                min="1"
+                max={selected.n_subjects || 999}
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+              />
+              <span className="field-hint">
+                Which participant's recording to analyse
+                {selected.n_subjects && ` (1–${selected.n_subjects})`}. BCI models are
+                usually trained per-person, since brain signals differ between individuals.
+              </span>
             </div>
+
+            {selected.runs && (
+              <div className="fetch-field">
+                <label>Task</label>
+                <select value={runVariant} onChange={(e) => setRunVariant(e.target.value)}>
+                  {Object.keys(selected.runs).map((key) => (
+                    <option key={key} value={key}>{key.replace(/_/g, " ")}</option>
+                  ))}
+                </select>
+                <span className="field-hint">
+                  This dataset recorded several tasks — pick which one to classify.
+                </span>
+              </div>
+            )}
+          </div>
+
+          {notes.link && (
+            <a className="dataset-link" href={notes.link} target="_blank" rel="noreferrer">
+              Dataset documentation ↗
+            </a>
+          )}
+
+          <button className="primary-btn" onClick={handleFetch} disabled={isFetching}>
+            {isFetching ? "Downloading…" : "Fetch Dataset"}
+          </button>
+
+          {isFetching && (
+            <p className="hint-text">
+              Downloading {notes.size || "the dataset"} — this runs synchronously, so the
+              page will sit here until it finishes. Subsequent fetches are cached and instant.
+            </p>
           )}
         </div>
       )}
 
-      <button
-        className="primary-btn"
-        onClick={handleFetch}
-        disabled={!selected || isFetching}
-        style={{ marginTop: 16 }}
-      >
-        {isFetching ? "Downloading…" : "Fetch Dataset"}
-      </button>
-      {isFetching && (
-        <p className="hint-text">First fetch downloads the data — this can take a few minutes.</p>
-      )}
-
       {error && <div className="error-box">{error}</div>}
-
       {bidsData && <BidsSelector uploadData={bidsData} onConfigured={onReady} />}
     </div>
   );

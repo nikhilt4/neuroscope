@@ -48,8 +48,17 @@ DATASET_PRESETS = {
         "ica_enabled": False,
         "montage": "easycap-M1",
     },
-
+    
     "erp_core": {
+        "bandpass_low": 0.1, "bandpass_high": None, "notch_freq": 60,
+        "epoch_tmin": -0.6, "epoch_tmax": 0.4, "baseline": (-0.4, -0.2),
+        "baseline_enabled": True,
+        "reference": ["P9", "P10"], "ica_enabled": True,
+        # MNE ships only the Flankers/ERN paradigm — the other six ERP CORE
+        # presets are kept below for uploaded BIDS releases of the full dataset.
+    },
+    
+    "erp_core_full": {
         "N400": {
             "bandpass_low": 0.1, "bandpass_high": None, "notch_freq": 60,
             "epoch_tmin": -0.2, "epoch_tmax": 0.8, "baseline_enabled": True,

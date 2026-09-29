@@ -28,12 +28,12 @@ MNE_DATASETS = {
         "description": "Steady-state visually evoked potentials, single demo subject.",
     },
     "erp_core": {
-        "name": "ERP CORE",
-        "n_subjects": 5,
+        "name": "ERP CORE (Flankers)",
+        "n_subjects": 1,
+        "n_channels": 33,
+        "sampling_rate": 1024,
         "task": "erp",
-        "description": "6 ERP paradigms (N170, MMN, N2pc, N400, P3, LRP/ERN), subjects 015-019.",
-        "sessions": ["N400", "ERN", "LRP", "MMN", "N2pc", "N170", "P3"],
-        "is_bids": True,
+        "description": "Single subject, Flankers task (ERN paradigm). Compatible/incompatible stimuli with left/right targets, plus response events.",
     },
     "limo": {
         "name": "LIMO EEG",
@@ -62,6 +62,8 @@ def fetch_mne_dataset(dataset_name: str, subjects: list, runs: list = None):
 
     subject = subjects[0]
 
+    mne.set_log_level("INFO")
+    
     try:
         if dataset_name == "eegbci":
             run_list = runs or MNE_DATASETS["eegbci"]["runs"]["left_right_hand"]
@@ -89,13 +91,15 @@ def fetch_mne_dataset(dataset_name: str, subjects: list, runs: list = None):
 
         elif dataset_name == "erp_core":
             from mne.datasets import erp_core
-            from backend.loaders.bids_loader import scan_bids_entities, load_bids
-            
-            bids_root = erp_core.data_path(verbose=False)
-            
-            entities = scan_bids_entities(bids_root)
-            
-            return {"bids_root": bids_root, "entities": entities}
+            data_path = erp_core.data_path(verbose=False)
+            fif_files = list(Path(data_path).glob("*.fif"))
+            if not fif_files:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"ERP CORE downloaded but no .fif found in {data_path}."
+                )
+            raw = mne.io.read_raw_fif(fif_files[0], preload=True, verbose=False)
+            return raw
             
 
         elif dataset_name == "limo":
@@ -129,3 +133,6 @@ def fetch_mne_dataset(dataset_name: str, subjects: list, runs: list = None):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch MNE dataset: {str(e)}")
+    
+    finally:
+        mne.set_log_level("WARNING")

@@ -242,7 +242,7 @@ const PARAM_FIELDS = {
   eegnet: [
     { key: "epochs", label: "Training epochs", type: "number", def: 50,
       hint: "Capped server-side to keep the demo responsive" },
-    { key: "learning_rate", label: "Learning rate", type: "number", step: 0.0001, def: 0.001 },
+    { key: "learning_rate", label: "Learning rate", type: "number", step: 0.0001, def: 0.01 },
     { key: "batch_size", label: "Batch size", type: "number", def: 32 },
     { key: "dropout_rate", label: "Dropout", type: "number", step: 0.05, def: 0.5 },
   ],

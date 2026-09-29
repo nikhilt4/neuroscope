@@ -245,6 +245,7 @@ function Wizard({ onExit }) {
           {step === 2 && (
             <PreprocessSection
               mode={selectedMode}
+              capabilities={readyData}
               preset={preset}
               overrides={preprocessOverrides}
               setOverrides={setPreprocessOverrides}

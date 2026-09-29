@@ -39,7 +39,7 @@ router = APIRouter()
 
 TEMP_BASE = Path("/tmp/neuroscope")
 
-def _build_full_response(session_id: str, file_format: str, capabilities: dict, source: str = "upload") -> UploadResponse:
+def _build_full_response(session_id: str, file_format: str, capabilities: dict, source: str = "upload", dataset_name: Optional[str] = None) -> UploadResponse:
     return UploadResponse(
         session_id=session_id,
         format=file_format,
@@ -57,7 +57,9 @@ def _build_full_response(session_id: str, file_format: str, capabilities: dict, 
         is_ready=not capabilities["needs_event_setup"],
         source=source,
         motor_channels=capabilities["motor_channels"],
-        n_epochs=capabilities.get("n_epochs")
+        n_epochs=capabilities.get("n_epochs"),
+        is_epochs=capabilities.get("is_epochs", False),
+        dataset_name=dataset_name
     )
     
     
@@ -511,41 +513,8 @@ async def fetch_dataset(request: DatasetFetchRequest, background_tasks: Backgrou
     effective_runs = request.runs
     
     try:       
-        if request.source == "mne" and request.dataset_name == "erp_core":
-            result = fetch_mne_dataset("erp_core", request.subjects)
-            entities = result["entities"]
-            
-            register_session(
-                session_id,
-                source="bids",
-                bids_root=str(result["bids_root"]),
-                dataset_name="erp_core",
-                subjects=request.subjects,
-                is_ready=False,
-            )
 
-            return UploadResponse(
-                session_id=session_id,
-                format="bids",
-                n_channels=0,
-                channels=[],
-                sampling_rate=0.0,
-                duration_seconds=0.0,
-                events_found=False,
-                event_classes=[],
-                available_modes=[],
-                recommended_mode="basic",
-                needs_column_picker=False,
-                needs_variable_picker=False,
-                needs_event_setup=False,
-                is_ready=False,
-                source="mne",
-                bids_entities=entities,
-                needs_bids_selection=True,
-            )
-
-        elif request.source == "mne":
-            effective_runs = request.runs
+        if request.source == "mne":
             if request.dataset_name == "eegbci" and not effective_runs:
                 from backend.fetchers.mne_fetcher import MNE_DATASETS
                 effective_runs = MNE_DATASETS["eegbci"]["runs"]["left_right_hand"]
@@ -609,11 +578,11 @@ async def fetch_dataset(request: DatasetFetchRequest, background_tasks: Backgrou
         source=request.source,
         dataset_name=request.dataset_name,
         subjects=request.subjects,
-        runs=getattr(request, "runs", None),
+        runs=effective_runs,
         capabilities=capabilities,
         is_ready=True,
     )
-    return _build_full_response(session_id, request.dataset_name, capabilities, source=request.source)
+    return _build_full_response(session_id, request.dataset_name, capabilities, source=request.source, dataset_name=request.dataset_name)
 
 @router.get("/dataset/fetch/progress/{session_id}")
 async def fetch_progress(session_id: str):

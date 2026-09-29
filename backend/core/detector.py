@@ -16,9 +16,9 @@ TEMPORAL        = {"t7", "t8", "tp7", "tp8"} & ALL_MONTAGE_CHS
 
 def detect_capabilities(obj: mne.io.Raw | mne.Epochs) -> dict:
     
-    is_epochs = isinstance(obj, mne.Epochs)
+    is_epochs = isinstance(obj, mne.BaseEpochs)
     ch_names = obj.ch_names
-    sampling_freq = obj.info["sfreq"]
+    sampling_freq = float(obj.info["sfreq"])
     
     if is_epochs:
         total_epochs_duration = len(obj) * (obj.tmax - obj.tmin)
@@ -138,7 +138,7 @@ def extract_events(obj: Union[mne.io.Raw, mne.Epochs]) -> tuple[bool, List[str]]
     returns (events_found: bool, class_names: List[str])
     """
     
-    if isinstance(obj, mne.Epochs):
+    if isinstance(obj, mne.BaseEpochs):
         return True, list(obj.event_id.keys())
     
     try:

@@ -313,6 +313,7 @@ def run_classifier(
                     detail=f"'{classifier_name}' trains on raw epoch data — requires epochs_obj and labels."
                 )
             data = epochs_obj.get_data(copy=False).astype(np.float32)
+            data = data * 1e6
             _, n_chans, n_times = data.shape
 
             # torch needs contiguous int64 class indices; sklearn tolerates

@@ -24,3 +24,6 @@ mne_data/
 
 # Temp session data your backend creates
 /tmp/
+
+
+C-/

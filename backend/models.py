@@ -48,6 +48,8 @@ class UploadResponse(BaseModel):
     n_epochs: Optional[int] = None
     bids_entities: Optional[List[dict]] = None
     needs_bids_selection: bool = False
+    is_epochs: bool = False
+    dataset_name: Optional[str] = None
     
     
 class BidsSelection(BaseModel):
