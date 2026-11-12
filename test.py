@@ -125,9 +125,44 @@
 
 
 
-import numpy as np
+# import numpy as np
+# from backend.fetchers.moabb_fetcher import fetch_moabb_dataset
+# ep = fetch_moabb_dataset("BNCI2014_001", [1])
+# d = ep.get_data(copy=False)
+# print("raw std:", np.std(d), "max:", np.abs(d).max())
+# print("x1e6 std:", np.std(d * 1e6))
+
+
+# from braindecode.classifier import EEGClassifier
+# from braindecode.models import EEGNet
+# m = EEGNet(n_chans=22, n_outputs=4, n_times=1001, sfreq=250)
+# c = EEGClassifier(module=m, lr=0.5, max_epochs=1, train_split=None)
+# print(c.lr, c.get_params().get("optimizer__lr", "not set"))
+
+
+# from braindecode.models import EEGNet
+# from braindecode.classifier import EEGClassifier
+# c = EEGClassifier(module=EEGNet, module__n_chans=22, module__n_outputs=4,
+#                   module__n_times=1001, module__sfreq=250,
+#                   optimizer__lr=0.5, max_epochs=1, train_split=None)
+# print(c.get_params()["optimizer__lr"])
+# print(c.optimizer)
+
+
+# import inspect
+# from braindecode.models import EEGNet
+# print(inspect.signature(EEGNet.__init__))
+
+
+# from braindecode.models import EEGNet
+# m = EEGNet(n_chans=22, n_outputs=4, n_times=1001, sfreq=250)
+# print(sum(p.numel() for p in m.parameters()))
+# m2 = EEGNet(n_chans=22, n_outputs=4, n_times=501, sfreq=250)
+# print(sum(p.numel() for p in m2.parameters()))
+
+
+
 from backend.fetchers.moabb_fetcher import fetch_moabb_dataset
 ep = fetch_moabb_dataset("BNCI2014_001", [1])
-d = ep.get_data(copy=False)
-print("raw std:", np.std(d), "max:", np.abs(d).max())
-print("x1e6 std:", np.std(d * 1e6))
+print("montage:", ep.get_montage())
+print("ch_names:", ep.ch_names[:8])

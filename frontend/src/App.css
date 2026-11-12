@@ -848,3 +848,27 @@ body {
 .config-row input.overridden, .config-row select.overridden {
   border-color: #6366f1; background: #eef2ff;
 }
+
+
+
+
+.chart-block { margin: 28px 0; }
+.chart-head { display: flex; justify-content: space-between; align-items: center; }
+.chart-head select { border: 1px solid #d1d5db; border-radius: 6px; padding: 4px 8px; font-size: .85rem; }
+
+.chart-legend { display: flex; gap: 16px; justify-content: center; font-size: .75rem; color: #6b7280; margin-top: 4px; }
+.chart-legend span { display: flex; align-items: center; gap: 5px; }
+.chart-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+.confusion-wrap { overflow-x: auto; }
+.confusion-table { border-collapse: collapse; font-size: .82rem; margin-top: 10px; }
+.confusion-table th, .confusion-table td { padding: 8px 14px; text-align: center; border: 1px solid #e5e7eb; }
+.confusion-table thead th { background: #f9fafb; font-weight: 600; font-size: .75rem; }
+.confusion-table tbody th { background: #f9fafb; text-align: right; font-weight: 500; }
+.cm-corner { font-size: .68rem !important; color: #9ca3af; font-weight: 400 !important; }
+.cm-recall { background: #f9fafb; font-weight: 600; color: #4b5563; }
+
+
+
+
+.topomap-img { width: 100%; max-width: 640px; display: block; margin: 0 auto; }

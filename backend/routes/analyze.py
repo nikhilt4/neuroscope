@@ -6,6 +6,10 @@ from backend.core.presets import get_preset
 from backend.core.pipeline import reload_data, prepare_epochs, get_labels
 from backend.core.features import extract_features
 from backend.core.classifiers import run_all_classifiers
+from backend.core.visualizer import band_topomaps
+
+import numpy as np
+from backend.core.features import extract_features, FREQUENCY_BANDS
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
 
@@ -45,6 +49,34 @@ async def analyze(request: AnalysisRequest):
     X, extras = (None, {})
     if request.mode != "motor_imagery":
         X, extras = extract_features(epochs, request.mode, labels=y)
+        
+    psd_data = None
+    if request.mode == "spectral" and "raw_psds" in extras:
+        psds = extras["raw_psds"]
+        freqs = extras["freqs"]
+        psd_data = {
+            "freqs": [float(f) for f in freqs],
+            "curves": {
+                name: [float(v) for v in np.log10(psds[y == code].mean(axis=(0, 1)) + 1e-20)]
+                for code, name in zip(sorted(set(y.tolist())), class_names)
+            },
+            "bands": {k: list(v) for k, v in FREQUENCY_BANDS.items()},
+            "passband": [
+                float(epochs.info.get("highpass") or 0),
+                float(epochs.info.get("lowpass") or epochs.info["sfreq"] / 2),
+            ],
+        }    
+
+
+    topomaps = None
+    if request.mode == "spectral" and "raw_psds" in extras:
+        topomaps = band_topomaps(
+            epochs, y, class_names,
+            extras["raw_psds"], extras["freqs"],
+            FREQUENCY_BANDS,
+            passband=tuple(psd_data["passband"]) if psd_data else None,
+        )
+    
 
     clf = request.classifiers
     configs = dict(clf.configs)
@@ -73,6 +105,8 @@ async def analyze(request: AnalysisRequest):
         "dataset_summary": {
             "source": session.get("source"),
             "dataset": session.get("dataset_name") or session.get("file_path"),
+            "subjects": session.get("subjects"),
+            "runs": session.get("runs"),
             "n_epochs": int(len(epochs)),
             "n_channels": int(len(epochs.ch_names)),
             "sampling_rate": float(epochs.info["sfreq"]),
@@ -85,4 +119,6 @@ async def analyze(request: AnalysisRequest):
         "best_classifier": best["classifier"] if best else None,
         "feature_info": {k: v for k, v in extras.items()
                          if k in ("feature_names", "band_names", "n_components")},
+        "psd": psd_data,
+        "topomaps": topomaps,
     }

@@ -58,11 +58,13 @@
 // export default ResultsSection;
 
 
-
-
-
-
+import { useState } from "react";
+import AccuracyChart from "./AccuracyChart";
+import ConfusionMatrix from "./ConfusionMatrix";
 import ParamsExport from "./ParamsExport";
+import PSDChart from "./PSDChart";
+import TopoMaps from "./TopoMaps";
+
 
 const CATEGORY_LABELS = {
   feature: "Classical",
@@ -72,6 +74,8 @@ const CATEGORY_LABELS = {
 
 function ResultsSection({ results }) {
 
+    const [cmFor, setCmFor] = useState(results?.best_classifier ?? null);
+
   if (!results) {
     return <p className="placeholder-text">Run the analysis above to see results.</p>;
   }
@@ -79,6 +83,7 @@ function ResultsSection({ results }) {
   const summary = results.dataset_summary;
   const succeeded = results.classifiers.filter((c) => c.accuracy_mean !== null);
   const failed = results.classifiers.filter((c) => c.accuracy_mean === null);
+  const selectedResult = succeeded.find((c) => c.classifier === cmFor);
 
   // Chance level depends on class count, not a fixed 50% — a 4-class motor
   // imagery task is at chance around 25%.
@@ -103,6 +108,10 @@ function ResultsSection({ results }) {
         <div className="summary-card">
           <span className="label">Sampling rate</span>
           <span className="value">{summary.sampling_rate} Hz</span>
+        </div>
+        <div className="summary-card">
+          <span className="label">Subject</span>
+          <span className="value">{summary.subjects?.join(", ") ?? "—"}</span>
         </div>
       </div>
 
@@ -146,6 +155,29 @@ function ResultsSection({ results }) {
             })}
         </tbody>
       </table>
+
+      <AccuracyChart results={results.classifiers} chance={chance}
+          bestName={results.best_classifier} />
+
+      {selectedResult?.confusion_matrix && (
+        <div className="chart-block">
+          <div className="chart-head">
+            <h3 className="subheading">Confusion Matrix</h3>
+            <select value={cmFor} onChange={(e) => setCmFor(e.target.value)}>
+              {succeeded.map((c) => (
+                <option key={c.classifier} value={c.classifier}>{c.classifier}</option>
+              ))}
+            </select>
+          </div>
+          <ConfusionMatrix matrix={selectedResult.confusion_matrix}
+                           classNames={summary.classes} />
+        </div>
+      )}
+
+      {results.psd && <PSDChart psd={results.psd} />}
+
+      {results.topomaps && <TopoMaps topomaps={results.topomaps} />}
+
 
       {/* run_all_classifiers isolates failures so one broken classifier doesn't
           kill the batch — surface them rather than silently dropping rows */}
