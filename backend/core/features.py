@@ -114,7 +114,19 @@ def extract_band_power_features(epochs: mne.Epochs) -> Tuple[np.ndarray, dict]:
 
     # Stack into [n_epochs, n_channels, n_bands], then flatten to [n_epochs, n_channels * n_bands]
     stacked = np.stack(band_powers, axis=2)
-    features = stacked.reshape(n_epochs, -1)
+
+    # log10, for two reasons:
+    # 1. Raw band power is ~1e-12 V^2/Hz. sklearn's trees treat any feature whose
+    #    range is <= FEATURE_THRESHOLD = 1e-7 as constant (sklearn/tree/_partitioner.pxd,
+    #    sklearn 1.9.0), so RF and Extra Trees saw 110 "constant" features and sat at
+    #    chance (BNCI2014_001 subject 1: rf 0.248 -> 0.467, extra_trees 0.245 -> 0.467).
+    # 2. Power is heavily right-skewed; the log makes it closer to normal, the same
+    #    reason MNE's CSP log-transforms its average-power output ("apply a log
+    #    transform to standardize features",
+    #    https://mne.tools/1.12/generated/mne.decoding.CSP.html).
+    # The floor guards flat channels, where power is 0 and log10 would give -inf.
+    # raw_psds below stays in linear units — the PSD chart and topomaps do their own scaling.
+    features = np.log10(np.maximum(stacked, 1e-30)).reshape(n_epochs, -1)
 
     feature_names = [
         f"{ch}_{band}"

@@ -76,7 +76,7 @@ def reload_data(session: dict):
     raise HTTPException(status_code=400, detail=f"Cannot reload session from source: {source}")
 
 
-def prepare_epochs(data, config: dict, runs: Optional[list] = None) -> mne.Epochs:
+def prepare_epochs(data, config: dict, runs: Optional[list] = None) -> Tuple[mne.BaseEpochs, dict]:
     """
     Single front door to the preprocessing stage.
 
@@ -87,7 +87,15 @@ def prepare_epochs(data, config: dict, runs: Optional[list] = None) -> mne.Epoch
     if isinstance(data, mne.BaseEpochs):
         return _crop_epochs(data, config.get("epoch_train_crop")), config
     if config.get("annotation_rename"):
-        config = {**config, "annotation_rename": resolve_annotation_rename(config, runs=runs)}
+        mapping = resolve_annotation_rename(config, runs=runs)
+        config = {**config, "annotation_rename": mapping}
+        # The classes to classify are whatever the rename produced for THIS run
+        # selection (eegbci: left/right hand for runs 4/8/12, hands/feet for 6/10/14).
+        # Hardcoding them in the preset broke the hands/feet variant. Unrenamed
+        # annotations (eegbci's T0 = rest) are dropped. An explicit include_events
+        # from the user still wins.
+        if not config.get("include_events"):
+            config["include_events"] = list(dict.fromkeys(mapping.values()))
     return preprocess_raw(data, config), config
 
 

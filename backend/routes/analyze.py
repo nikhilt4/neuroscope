@@ -1,15 +1,13 @@
+import mne
 from fastapi import APIRouter, HTTPException
 
 from backend.models import AnalysisRequest
 from backend.utils.session_registry import get_session
 from backend.core.presets import get_preset
 from backend.core.pipeline import reload_data, prepare_epochs, get_labels
-from backend.core.features import extract_features
-from backend.core.classifiers import run_all_classifiers
-from backend.core.visualizer import band_topomaps
-
-import numpy as np
 from backend.core.features import extract_features, FREQUENCY_BANDS
+from backend.core.classifiers import run_all_classifiers
+from backend.core.visualizer import spectral_summary
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
 
@@ -18,9 +16,46 @@ router = APIRouter(prefix="/analyze", tags=["analyze"])
 MAX_EEGNET_EPOCHS = 50
 
 
+def describe_preprocessing(data, config: dict, epochs: mne.BaseEpochs, source: str) -> dict:
+    """
+    What preprocessing ACTUALLY ran, for the results page and the exported script.
+
+    Pre-epoched sources (MOABB paradigms, limo, kiloword, FIF epochs) skip
+    preprocess_raw entirely, so reporting the merged preset for them would
+    describe filters that never touched the data. Instead, report the
+    filter edges and window MNE recorded on the epochs themselves.
+    """
+    if not isinstance(data, mne.BaseEpochs):
+        return {k: v for k, v in config.items() if not k.startswith("_")}
+
+    applied = {
+        "pre_epoched": True,
+        "source": source,
+        "note": "Filtering and epoching were done before NeuroScope received the data "
+                "(by the MOABB paradigm or the file's author); NeuroScope did not re-filter.",
+        # info["highpass"/"lowpass"] are the filter edges MNE recorded on the data
+        # https://mne.tools/1.12/generated/mne.Info.html
+        "highpass_hz": float(epochs.info["highpass"]),
+        "lowpass_hz": float(epochs.info["lowpass"]),
+        "epoch_window_s": [float(epochs.tmin), float(epochs.tmax)],
+    }
+    if config.get("epoch_train_crop"):
+        applied["epoch_train_crop"] = config["epoch_train_crop"]   # this one DID run
+    return applied
+
+
 @router.post("")
 async def analyze(request: AnalysisRequest):
     session = get_session(request.session_id)
+
+    # Explicit `is False`: sessions written before is_ready existed have no key
+    # and were always analysable, so a missing key must not block them.
+    if session.get("is_ready") is False:
+        raise HTTPException(
+            status_code=400,
+            detail="This dataset isn't ready to analyse yet. Finish the setup step "
+                   "(column mapping, variable mapping, BIDS selection or event setup) first."
+        )
 
     available = session.get("capabilities", {}).get("available_modes", [])
     if available and request.mode not in available:
@@ -49,34 +84,13 @@ async def analyze(request: AnalysisRequest):
     X, extras = (None, {})
     if request.mode != "motor_imagery":
         X, extras = extract_features(epochs, request.mode, labels=y)
-        
-    psd_data = None
-    if request.mode == "spectral" and "raw_psds" in extras:
-        psds = extras["raw_psds"]
-        freqs = extras["freqs"]
-        psd_data = {
-            "freqs": [float(f) for f in freqs],
-            "curves": {
-                name: [float(v) for v in np.log10(psds[y == code].mean(axis=(0, 1)) + 1e-20)]
-                for code, name in zip(sorted(set(y.tolist())), class_names)
-            },
-            "bands": {k: list(v) for k, v in FREQUENCY_BANDS.items()},
-            "passband": [
-                float(epochs.info.get("highpass") or 0),
-                float(epochs.info.get("lowpass") or epochs.info["sfreq"] / 2),
-            ],
-        }    
 
-
-    topomaps = None
-    if request.mode == "spectral" and "raw_psds" in extras:
-        topomaps = band_topomaps(
-            epochs, y, class_names,
-            extras["raw_psds"], extras["freqs"],
-            FREQUENCY_BANDS,
-            passband=tuple(psd_data["passband"]) if psd_data else None,
-        )
-    
+    # Every mode gets the PSD + topomaps; spectral mode reuses the PSD it
+    # already computed for its features instead of computing it twice.
+    psd_data, topomaps = spectral_summary(
+        epochs, y, class_names, FREQUENCY_BANDS,
+        psds=extras.get("raw_psds"), freqs=extras.get("freqs"),
+    )
 
     clf = request.classifiers
     configs = dict(clf.configs)
@@ -114,7 +128,7 @@ async def analyze(request: AnalysisRequest):
             "classes": class_names,
             "class_counts": class_counts,
         },
-        "preprocessing_applied": {k: v for k, v in config.items() if not k.startswith("_")},
+        "preprocessing_applied": describe_preprocessing(data, config, epochs, session.get("source")),
         "classifiers": results,
         "best_classifier": best["classifier"] if best else None,
         "feature_info": {k: v for k, v in extras.items()

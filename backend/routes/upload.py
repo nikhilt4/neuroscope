@@ -21,7 +21,7 @@ from backend.fetchers.braindecode_fetcher import list_braindecode_datasets, fetc
 
 
 from backend.core.detector import detect_capabilities
-from backend.core.presets import get_preset
+from backend.core.presets import get_preset, analysis_class_names
 
 from backend.utils.file_utils import detect_format, save_temp_file, save_temp_files, detect_multi_format, cleanup_session
 from backend.utils.session_registry import get_session, register_session, get_external_bids_root, register_external_bids_root
@@ -39,7 +39,8 @@ router = APIRouter()
 
 TEMP_BASE = Path("/tmp/neuroscope")
 
-def _build_full_response(session_id: str, file_format: str, capabilities: dict, source: str = "upload", dataset_name: Optional[str] = None) -> UploadResponse:
+def _build_full_response(session_id: str, file_format: str, capabilities: dict, source: str = "upload",
+                         dataset_name: Optional[str] = None, runs: Optional[list] = None) -> UploadResponse:
     return UploadResponse(
         session_id=session_id,
         format=file_format,
@@ -59,7 +60,10 @@ def _build_full_response(session_id: str, file_format: str, capabilities: dict, 
         motor_channels=capabilities["motor_channels"],
         n_epochs=capabilities.get("n_epochs"),
         is_epochs=capabilities.get("is_epochs", False),
-        dataset_name=dataset_name
+        dataset_name=dataset_name,
+        n_eeg_channels=capabilities.get("n_eeg_channels"),
+        analysis_classes=analysis_class_names(
+            dataset_name, capabilities["recommended_mode"], capabilities["event_classes"], runs),
     )
     
     
@@ -227,7 +231,8 @@ async def upload_single(file: UploadFile = File(...)):
         format=file_format,
         file_path=str(file_path),
         capabilities=capabilities,
-        is_ready=True
+        # must agree with the is_ready in the response (_build_full_response)
+        is_ready=not capabilities["needs_event_setup"]
     )
 
     return _build_full_response(session_id, file_format, capabilities)
@@ -275,7 +280,7 @@ async def upload_multi(files: List[UploadFile] = File(...)):
             format="brainvision",
             file_path=str(vhdr_path),
             capabilities=capabilities,
-            is_ready=True
+            is_ready=not capabilities["needs_event_setup"]
         )
 
         return _build_full_response(session_id, "brainvision", capabilities)
@@ -400,18 +405,20 @@ async def upload_bids(file: UploadFile = File(...)):
         cleanup_session(session_id)
         raise HTTPException(status_code=500, detail=f"Failed to save ZIP: {str(e)}")
 
-    try:
-        bids_root = zip_handler(zip_path, session_id)
-    except HTTPException:
+    if not (file.filename or "").lower().endswith(".zip"):
         cleanup_session(session_id)
-        raise
+        raise HTTPException(status_code=400, detail="BIDS datasets must be uploaded as a .zip file.")
 
     try:
+        bids_root = zip_handler(zip_path, session_id)
         entities = scan_bids_entities(bids_root)
     except HTTPException:
         cleanup_session(session_id)
         raise
-    
+    except Exception as e:
+        cleanup_session(session_id)
+        raise HTTPException(status_code=500, detail=f"Failed to read BIDS ZIP: {e}")
+
     register_session(
         session_id,
         source="bids",
@@ -447,34 +454,26 @@ async def configure_bids(selection: BidsSelection):
     Second round trip after user picks subject/session/task/run
     from the BIDS selection UI.
     """
-    external_root = get_external_bids_root(selection.session_id)
-    
-    if external_root:
-        bids_root = external_root
-    else:
-        bids_root = TEMP_BASE / selection.session_id
+    # upload_bids stored the real dataset root (found by zip_handler) in the session,
+    # so there's no need to guess the folder layout again here.
+    stored_root = get_external_bids_root(selection.session_id)   # 404s if the session is gone
+    if not stored_root or not Path(stored_root).exists():
+        raise HTTPException(status_code=410, detail="This BIDS upload has expired — please upload the ZIP again.")
+    bids_root = Path(stored_root)
 
-        # Handle the possible nested-folder case from zip_handler
-        subdirs = [p for p in bids_root.iterdir() if p.is_dir()]
-        if len(subdirs) == 1 and not any(bids_root.glob("sub-*")):
-            bids_root = subdirs[0]
-
-        if not bids_root.exists():
-            raise HTTPException(status_code=404, detail="Session not found or expired.")
+    raw = load_bids(
+        bids_root,
+        subject=selection.subject,
+        task=selection.task,
+        session=selection.session,
+        run=selection.run,
+    )
 
     try:
-        raw = load_bids(
-            bids_root,
-            subject=selection.subject,
-            task=selection.task,
-            session=selection.session,
-            run=selection.run,
-        )
-    except HTTPException:
-        raise
+        capabilities = detect_capabilities(raw)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to detect capabilities: {e}")
 
-    capabilities = detect_capabilities(raw)
-    
     register_session(
         selection.session_id,
         source="bids",
@@ -484,7 +483,7 @@ async def configure_bids(selection: BidsSelection):
         session=selection.session,
         run=selection.run,
         capabilities=capabilities,
-        is_ready=True,
+        is_ready=not capabilities["needs_event_setup"],
     )
     return _build_full_response(selection.session_id, "bids", capabilities)
 
@@ -582,7 +581,8 @@ async def fetch_dataset(request: DatasetFetchRequest, background_tasks: Backgrou
         capabilities=capabilities,
         is_ready=True,
     )
-    return _build_full_response(session_id, request.dataset_name, capabilities, source=request.source, dataset_name=request.dataset_name)
+    return _build_full_response(session_id, request.dataset_name, capabilities, source=request.source,
+                                dataset_name=request.dataset_name, runs=effective_runs)
 
 @router.get("/dataset/fetch/progress/{session_id}")
 async def fetch_progress(session_id: str):

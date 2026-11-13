@@ -18,7 +18,11 @@ function ParamsExport({ results }) {
   const config = results.preprocessing_applied;
   const best = results.classifiers.find((c) => c.classifier === results.best_classifier);
 
+  // Subject goes in the header: accuracy varies hugely between people, so a result
+  // without its subject can't be compared with anything.
+  const subjects = results.dataset_summary.subjects;
   const code = `# NeuroScope — ${results.dataset_summary.dataset}
+# Subject: ${subjects?.length ? subjects.join(", ") : "uploaded recording"} · mode: ${results.mode}
 # ${results.dataset_summary.n_epochs} epochs, ${results.dataset_summary.n_channels} channels @ ${results.dataset_summary.sampling_rate} Hz
 # Classes: ${results.dataset_summary.classes.join(", ")}
 # Best: ${best?.classifier} at ${(best?.accuracy_mean * 100).toFixed(1)}%

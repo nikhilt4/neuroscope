@@ -1,155 +1,40 @@
-// import { useState } from "react";
-// import ProgressBar from "../components/ProgressBar";
-// import UploadSection from "../components/UploadSection";
-// import ChooseSection from "../components/ChooseSection";
-// import PreprocessSection from "../components/PreprocessSection";
-// import ClassifySection from "../components/ClassifySection";
-// import ResultsSection from "../components/ResultsSection";
-
-// const STEP_NAMES = ["Upload", "Choose", "Pre-Process", "Classify", "Results"];
-
-// const DEFAULT_PREPROCESS_CONFIG = {
-//   bandpass_low: 1,
-//   bandpass_high: 40,
-//   notch_enabled: true,
-//   notch_freq: "50",
-//   epoch_tmin: -0.2,
-//   epoch_tmax: 0.8,
-//   baseline_enabled: true,
-//   ica_enabled: false,
-//   ica_components: 20,
-//   reference: "average",
-// };
-
-// function Wizard({ onExit }) {
-//   const [step, setStep] = useState(0);
-//   const [direction, setDirection] = useState("forward");
-
-//   const [readyData, setReadyData] = useState(null);
-//   const [selectedMode, setSelectedMode] = useState(null);
-//   const [preprocessConfig, setPreprocessConfig] = useState(DEFAULT_PREPROCESS_CONFIG);
-//   const [results, setResults] = useState(null);
-
-//   const goNext = () => {
-//     setDirection("forward");
-//     setStep((s) => Math.min(s + 1, STEP_NAMES.length - 1));
-//   };
-
-//   const goBack = () => {
-//     setDirection("backward");
-//     setStep((s) => Math.max(s - 1, 0));
-//   };
-
-//   const canGoNext = [
-//     !!readyData,          // step 0 -> 1: needs upload done
-//     !!selectedMode,        // step 1 -> 2: needs mode selected
-//     true,                   // step 2 -> 3: preprocess always advances via its own button
-//     !!results,              // step 3 -> 4: needs results
-//   ];
-
-//   return (
-//     <div className="wizard">
-//       <div className="wizard-header">
-//         <button className="exit-btn" onClick={onExit}>← Exit</button>
-//         <ProgressBar steps={STEP_NAMES} current={step} />
-//       </div>
-
-//       <div className="wizard-frame">
-//         <div key={step} className={`wizard-slide slide-${direction}`}>
-//           {step === 0 && (
-//             <UploadSection
-//               onReady={(data) => {
-//                 setReadyData(data);
-//                 goNext();
-//               }}
-//             />
-//           )}
-
-//           {step === 1 && (
-//             <ChooseSection
-//               data={readyData}
-//               selectedMode={selectedMode}
-//               onModeSelected={(mode) => {
-//                 setSelectedMode(mode);
-//               }}
-//             />
-//           )}
-
-//           {step === 2 && (
-//             <PreprocessSection
-//               mode={selectedMode}
-//               config={preprocessConfig}
-//               setConfig={setPreprocessConfig}
-//               onConfigured={goNext}
-//             />
-//           )}
-
-//           {step === 3 && (
-//             <ClassifySection
-//               enabled={true}
-//               onRun={(mockResults) => {
-//                 setResults(mockResults);
-//                 goNext();
-//               }}
-//             />
-//           )}
-
-//           {step === 4 && (
-//             <ResultsSection
-//               results={results}
-//               preprocessConfig={preprocessConfig}
-//             />
-//           )}
-//         </div>
-//       </div>
-
-//       <div className="wizard-nav">
-//         <button className="secondary-btn" onClick={goBack} disabled={step === 0}>
-//           ← Back
-//         </button>
-//         {step < 4 && (
-//           <button
-//             className="primary-btn"
-//             onClick={goNext}
-//             disabled={!canGoNext[step]}
-//           >
-//             Next →
-//           </button>
-//         )}
-//       </div>
-//     </div>
-//   );
-// }
-
-// export default Wizard;
-
-
-
-
-import { useState, useEffect } from "react";
-import ProgressBar from "../components/ProgressBar";
+import { useState, useEffect, useMemo } from "react";
 import UploadSection from "../components/UploadSection";
 import ChooseSection from "../components/ChooseSection";
 import PreprocessSection from "../components/PreprocessSection";
 import ClassifySection from "../components/ClassifySection";
 import ResultsSection from "../components/ResultsSection";
+import Stepper from "../components/wizard/Stepper";
+import SummaryPanel from "../components/wizard/SummaryPanel";
+import { Icon, Logo } from "../components/ui/Icons";
 import * as api from "../api";
+import "./Wizard.css";
 
-const STEP_NAMES = ["Upload", "Choose", "Pre-Process", "Classify", "Results"];
+const STEPS = [
+  { name: "Load data", icon: "database",
+    title: "Load your data",
+    sub: "Pick a public dataset to explore, or bring your own recording. NeuroScope inspects it before anything runs." },
+  { name: "Analysis", icon: "choose",
+    title: "Choose an analysis",
+    sub: "NeuroScope checked what your data supports. Pick how features are computed from it." },
+  { name: "Preprocess", icon: "filter",
+    title: "Preprocess",
+    sub: "Cleaning applied before classification. Presets come from published pipelines, and every value can be changed." },
+  { name: "Classify", icon: "classify",
+    title: "Pick your decoders",
+    sub: "Every decoder is scored with the same stratified cross-validation, so the comparison is fair." },
+  { name: "Results", icon: "results",
+    title: "Results",
+    sub: "How each decoder did, and what the data looks like." },
+];
 
 function Wizard({ onExit }) {
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState("forward");
-
   const [readyData, setReadyData] = useState(null);
   const [selectedMode, setSelectedMode] = useState(null);
-
-  // Preset = read-only defaults from the backend, shown as placeholders.
-  // preprocessOverrides = ONLY what the user actually changed. Sending a full
-  // config would override the dataset's researched preset with generic values.
   const [preset, setPreset] = useState({});
   const [preprocessOverrides, setPreprocessOverrides] = useState({});
-
   const [classifierConfig, setClassifierConfig] = useState({
     selected: ["lda", "svm"],
     n_folds: 5,
@@ -157,8 +42,8 @@ function Wizard({ onExit }) {
     csp_reg: null,
     configs: {},
   });
-
   const [results, setResults] = useState(null);
+  const [resultsKey, setResultsKey] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState(null);
 
@@ -170,15 +55,27 @@ function Wizard({ onExit }) {
       .catch(() => setPreset({}));   // non-fatal: backend applies it anyway
   }, [readyData?.session_id, selectedMode]);
 
-  const goNext = () => {
-    setDirection("forward");
-    setStep((s) => Math.min(s + 1, STEP_NAMES.length - 1));
-  };
+  // Results are only reachable while they still describe the current settings.
+  // Change the mode, a filter or a model and the old results stop being linkable
+  // instead of silently sitting there looking current.
+  const configKey = useMemo(
+    () => JSON.stringify([readyData?.session_id, selectedMode, preprocessOverrides, classifierConfig]),
+    [readyData?.session_id, selectedMode, preprocessOverrides, classifierConfig]
+  );
+  const resultsCurrent = !!results && resultsKey === configKey;
 
-  const goBack = () => {
-    setDirection("backward");
-    setStep((s) => Math.max(s - 1, 0));
+  const canLeave = [!!readyData, !!selectedMode, true, resultsCurrent];
+  // furthest step reachable without skipping a required choice
+  let reachable = 0;
+  while (reachable < STEPS.length - 1 && canLeave[reachable]) reachable += 1;
+
+  const goTo = (i) => {
+    setDirection(i > step ? "forward" : "backward");
+    setStep(i);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  const goNext = () => goTo(Math.min(step + 1, STEPS.length - 1));
+  const goBack = () => goTo(Math.max(step - 1, 0));
 
   const runAnalysis = async () => {
     setIsAnalyzing(true);
@@ -191,7 +88,8 @@ function Wizard({ onExit }) {
         classifiers: classifierConfig,
       });
       setResults(data);
-      goNext();
+      setResultsKey(configKey);
+      goTo(4);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -199,87 +97,119 @@ function Wizard({ onExit }) {
     }
   };
 
-  const canGoNext = [
-    !!readyData,
-    !!selectedMode,
-    true,
-    !!results,
-  ];
+  // Length of each trial the decoders will see, for the suitability notes in Step 4
+  // (e.g. EEGNet on 30-s sleep windows). Pre-epoched data: total duration / trials.
+  const epochSeconds = (() => {
+    if (!readyData) return null;
+    if (readyData.is_epochs) return readyData.n_epochs ? readyData.duration_seconds / readyData.n_epochs : null;
+    const pick = (k) => (k in preprocessOverrides ? preprocessOverrides[k] : preset[k]);
+    const crop = pick("epoch_train_crop");
+    if (Array.isArray(crop) && crop.length === 2) return crop[1] - crop[0];
+    const tmin = pick("epoch_tmin"), tmax = pick("epoch_tmax");
+    return tmin != null && tmax != null ? tmax - tmin : null;
+  })();
+
+  const meta = STEPS[step];
 
   return (
-    <div className="wizard">
-      <div className="wizard-header">
-        <button className="exit-btn" onClick={onExit}>← Exit</button>
-        <ProgressBar steps={STEP_NAMES} current={step} />
-      </div>
+    <div className="wz">
+      <div className="wz-bg" aria-hidden="true"><i /><i /></div>
 
-      {error && (
-        <div className="error-box">
-          {error}
-          <button className="link-btn" onClick={() => setError(null)}>dismiss</button>
-        </div>
-      )}
-
-      <div className="wizard-frame">
-        <div key={step} className={`wizard-slide slide-${direction}`}>
-          {step === 0 && (
-            <UploadSection
-              onReady={(data) => {
-                setReadyData(data);
-                setSelectedMode(data.recommended_mode ?? null);
-                setResults(null);
-                setPreprocessOverrides({});
-                goNext();
-              }}
-            />
-          )}
-
-          {step === 1 && (
-            <ChooseSection
-              data={readyData}
-              selectedMode={selectedMode}
-              onModeSelected={setSelectedMode}
-            />
-          )}
-
-          {step === 2 && (
-            <PreprocessSection
-              mode={selectedMode}
-              capabilities={readyData}
-              preset={preset}
-              overrides={preprocessOverrides}
-              setOverrides={setPreprocessOverrides}
-              onConfigured={goNext}
-            />
-          )}
-
-          {step === 3 && (
-            <ClassifySection
-              capabilities={readyData}
-              mode={selectedMode}
-              config={classifierConfig}
-              setConfig={setClassifierConfig}
-              onRun={runAnalysis}
-              isRunning={isAnalyzing}
-            />
-          )}
-
-          {step === 4 && (
-            <ResultsSection results={results} />
-          )}
-        </div>
-      </div>
-
-      <div className="wizard-nav">
-        <button className="secondary-btn" onClick={goBack} disabled={step === 0 || isAnalyzing}>
-          ← Back
+      <header className="wz-nav">
+        <button className="wz-brand" onClick={onExit} title="Back to the home page">
+          <Logo className="wz-logo" />NeuroScope
         </button>
-        {step < 4 && (
-          <button className="primary-btn" onClick={goNext} disabled={!canGoNext[step]}>
-            Next →
-          </button>
-        )}
+        <Stepper steps={STEPS} current={step} reachable={reachable} onGo={goTo} />
+        <button className="wz-exit" onClick={onExit}><Icon name="x" /><span>Exit</span></button>
+      </header>
+
+      <div className="wz-layout">
+        <main className="wz-main">
+          <div className="wz-head">
+            <p className="wz-kicker">Step {step + 1} of {STEPS.length}</p>
+            <h1>{meta.title}</h1>
+            <p className="wz-sub">{meta.sub}</p>
+          </div>
+
+          {error && (
+            <div className="wz-alert" role="alert">
+              <Icon name="alert" />
+              <span>{error}</span>
+              <button className="up-link" onClick={() => setError(null)}>Dismiss</button>
+            </div>
+          )}
+
+          <div key={step} className={`wz-slide wz-slide-${direction}`}>
+            {step === 0 && (
+              <UploadSection
+                loaded={readyData}
+                onReady={(data) => {
+                  setReadyData(data);
+                  setSelectedMode(data.recommended_mode ?? null);
+                  setResults(null);
+                  setPreprocessOverrides({});
+                }}
+              />
+            )}
+            {step === 1 && (
+              <ChooseSection data={readyData} selectedMode={selectedMode} onModeSelected={setSelectedMode} />
+            )}
+            {step === 2 && (
+              <PreprocessSection
+                mode={selectedMode}
+                capabilities={readyData}
+                preset={preset}
+                overrides={preprocessOverrides}
+                setOverrides={setPreprocessOverrides}
+              />
+            )}
+            {step === 3 && (
+              <ClassifySection
+                capabilities={readyData}
+                mode={selectedMode}
+                config={classifierConfig}
+                setConfig={setClassifierConfig}
+                epochSeconds={epochSeconds}
+              />
+            )}
+            {step === 4 && <ResultsSection results={results} datasetLabel={readyData?.display_name} />}
+          </div>
+        </main>
+
+        <SummaryPanel
+          data={readyData}
+          mode={selectedMode}
+          preset={preset}
+          overrides={preprocessOverrides}
+          classifiers={step >= 3 || results ? classifierConfig : null}
+        />
       </div>
+
+      <footer className="wz-footer">
+        <div className="wz-footer-inner">
+          <button className="wz-btn wz-btn-ghost" onClick={goBack} disabled={step === 0 || isAnalyzing}>
+            <Icon name="arrowLeft" />Back
+          </button>
+          <span className="wz-footer-step">
+            <b>{meta.name}</b>
+            {step < STEPS.length - 1 && <> · next: {STEPS[step + 1].name}</>}
+          </span>
+          {step < 3 && (
+            <button className="wz-btn" onClick={goNext} disabled={!canLeave[step]}>
+              Continue<Icon name="arrowRight" />
+            </button>
+          )}
+          {step === 3 && (
+            <button className="wz-btn" onClick={resultsCurrent ? goNext : runAnalysis}
+                    disabled={isAnalyzing || !classifierConfig.selected.length}>
+              {isAnalyzing
+                ? <><span className="wz-spinner" />Running…</>
+                : resultsCurrent ? <>View results<Icon name="arrowRight" /></> : <>Run analysis<Icon name="bolt" /></>}
+            </button>
+          )}
+          {step === 4 && <span />}
+        </div>
+      </footer>
     </div>
   );
 }

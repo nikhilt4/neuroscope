@@ -1,6 +1,6 @@
 import { useState } from "react";
+import * as api from "../api";
 
-const API_BASE = "http://127.0.0.1:8000";
 const ROLES = ["Ignore", "EEG Channel", "Time", "Label"];
 
 function ColumnPicker({ uploadData, onConfigured }) {
@@ -41,19 +41,13 @@ function ColumnPicker({ uploadData, onConfigured }) {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE}/upload/configure`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: uploadData.session_id,
-          eeg_columns,
-          time_column,
-          label_column,
-          sampling_rate: Number(samplingRate),
-        }),
+      const data = await api.configureColumns({
+        session_id: uploadData.session_id,
+        eeg_columns,
+        time_column,
+        label_column,
+        sampling_rate: Number(samplingRate),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Configuration failed");
       onConfigured(data);
     } catch (err) {
       setError(err.message);
@@ -91,7 +85,7 @@ function ColumnPicker({ uploadData, onConfigured }) {
       {error && <div className="error-box">{error}</div>}
 
       <button className="primary-btn" onClick={handleSubmit} disabled={isSubmitting}>
-        {isSubmitting ? "Processing..." : "Run Analysis"}
+        {isSubmitting ? "Loading…" : "Load data"}
       </button>
     </div>
   );

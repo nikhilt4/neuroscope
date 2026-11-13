@@ -1,40 +1,46 @@
 import { useState } from "react";
 import ColumnPicker from "./ColumnPicker";
 import DatasetPicker from "./DatasetPicker";
-
-// const API_BASE = "http://127.0.0.1:8000";
+import BidsSelector from "./BidsSelector";
+import Dropzone, { classifySelection } from "./upload/Dropzone";
+import DetectedCard from "./upload/DetectedCard";
+import { Icon } from "./ui/Icons";
 import * as api from "../api";
+import "./upload/Upload.css";
 
-const UPLOAD_TYPES = ["Single", "Multiple", "Public Dataset", "BIDS"];
+const UPLOADERS = { single: (f) => api.uploadSingle(f[0]), multi: api.uploadMulti, bids: (f) => api.uploadBids(f[0]) };
 
-function UploadSection({ onReady }) {
-  const [uploadType, setUploadType] = useState("Single");
-  const [selectedFiles, setSelectedFiles] = useState([]);
+/**
+ * Step 1. Two routes in (public dataset or your own files), one way out:
+ * onReady(data) with the backend's UploadResponse. Once data is loaded the
+ * step shows what was detected instead of the pickers.
+ */
+function UploadSection({ loaded, onReady }) {
+  const [route, setRoute] = useState("public");
+  const [changing, setChanging] = useState(false);
+  const [files, setFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
-  const [uploadData, setUploadData] = useState(null);
+  const [pending, setPending] = useState(null);   // upload that needs a second step
 
-  const handleFileChange = (e) => {
-    setSelectedFiles(Array.from(e.target.files));
-    setError(null);
-    setUploadData(null);
+  const finish = (data) => {
+    setPending(null);
+    setFiles([]);
+    setChanging(false);
+    onReady(data);
   };
 
   const handleUpload = async () => {
-    if (selectedFiles.length === 0) return;
+    const { kind } = classifySelection(files);
+    if (!kind) return;
     setIsUploading(true);
     setError(null);
-
+    setPending(null);
     try {
-      const data = uploadType === "Single"
-        ? await api.uploadSingle(selectedFiles[0])
-        : await api.uploadMulti(selectedFiles);
-
-      setUploadData(data);
-      // MAT files need the variable picker, same round-trip shape as CSV
-      if (!data.needs_column_picker && !data.needs_variable_picker) {
-        onReady(data);
-      }
+      const data = await UPLOADERS[kind](files);
+      // CSV, MAT and BIDS need a second round trip (column / variable / recording picker)
+      if (data.needs_column_picker || data.needs_variable_picker || data.needs_bids_selection) setPending(data);
+      else finish(data);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -42,62 +48,64 @@ function UploadSection({ onReady }) {
     }
   };
 
+  if (loaded && !changing) {
+    return <DetectedCard data={loaded} onChange={() => setChanging(true)} />;
+  }
+
+  const selection = classifySelection(files);
+
   return (
-    <div>
-      <div className="tab-bar">
-        {UPLOAD_TYPES.map((type) => (
-          <button
-            key={type}
-            className={`tab ${uploadType === type ? "tab-active" : ""}`}
-            disabled={type === "BIDS"}
-            onClick={() => {
-              setUploadType(type);
-              setSelectedFiles([]);
-              setUploadData(null);
-              setError(null);
-            }}
-          >
-            {type}
-            {type === "BIDS" && <span className="soon-badge">soon</span>}
-          </button>
-        ))}
+    <div className="up">
+      {loaded && (
+        <button className="up-link up-back" onClick={() => setChanging(false)}>
+          <Icon name="arrowLeft" />Keep using {loaded.dataset_name || "the current data"}
+        </button>
+      )}
+
+      <div className="up-routes" role="tablist" aria-label="Where your data comes from">
+        <button role="tab" aria-selected={route === "public"}
+                className={`up-route ${route === "public" ? "is-active" : ""}`} onClick={() => setRoute("public")}>
+          <span className="up-route-icon"><Icon name="database" /></span>
+          <span>
+            <b>Use a public dataset</b>
+            <small>Benchmark EEG from MNE, MOABB and braindecode. Nothing to download yourself.</small>
+          </span>
+          <em className="up-route-badge">Quickest start</em>
+        </button>
+        <button role="tab" aria-selected={route === "file"}
+                className={`up-route ${route === "file" ? "is-active" : ""}`} onClick={() => setRoute("file")}>
+          <span className="up-route-icon"><Icon name="upload" /></span>
+          <span>
+            <b>Upload your own data</b>
+            <small>EDF, BDF, GDF, FIF, BrainVision, CSV or a BIDS dataset as a .zip.</small>
+          </span>
+        </button>
       </div>
 
-      {uploadType === "Public Dataset" ? (
-        <DatasetPicker onReady={onReady} />
+      {route === "public" ? (
+        <DatasetPicker onReady={finish} />
       ) : (
-        <>
-          <div className="upload-box">
-            <input
-              type="file"
-              multiple={uploadType === "Multiple"}
-              onChange={handleFileChange}
-              accept=".edf,.bdf,.gdf,.fif,.vhdr,.vmrk,.eeg,.mat,.csv,.tsv"
-            />
-            {selectedFiles.length > 0 && (
-              <p className="file-list">{selectedFiles.map((f) => f.name).join(", ")}</p>
-            )}
+        <div className="up-panel">
+          <Dropzone files={files} setFiles={(f) => { setFiles(f); setError(null); setPending(null); }} disabled={isUploading} />
+
+          <div className="up-actions">
+            <button className="wz-btn" onClick={handleUpload} disabled={!selection.kind || isUploading}>
+              {isUploading ? <><span className="wz-spinner" />Uploading…</> : <>Upload and inspect<Icon name="arrowRight" /></>}
+            </button>
+            <span className="up-hint">Files are sent to the NeuroScope backend and used only for this analysis.</span>
           </div>
 
-          <button
-            className="primary-btn"
-            onClick={handleUpload}
-            disabled={selectedFiles.length === 0 || isUploading}
-          >
-            {isUploading ? "Uploading..." : "Upload"}
-          </button>
+          {error && <div className="wz-alert"><Icon name="alert" /><span>{error}</span></div>}
 
-          {error && <div className="error-box">{error}</div>}
-
-          {uploadData?.needs_column_picker && (
-            <ColumnPicker uploadData={uploadData} onConfigured={onReady} />
+          {pending?.needs_column_picker && <ColumnPicker uploadData={pending} onConfigured={finish} />}
+          {pending?.needs_variable_picker && (
+            <div className="wz-alert wz-alert-info">
+              <Icon name="info" />
+              <span>MATLAB files need a variable picker to say which array holds the EEG. That&apos;s not built yet. Export to EDF or CSV for now.</span>
+            </div>
           )}
-          {uploadData?.needs_variable_picker && (
-            <p className="error-box">
-              MAT files need a variable picker, which isn't built yet.
-            </p>
-          )}
-        </>
+          {pending?.needs_bids_selection && <BidsSelector uploadData={pending} onConfigured={finish} />}
+        </div>
       )}
     </div>
   );

@@ -1,7 +1,6 @@
 import mne
 import numpy as np
-from typing import Union
-from typing import List, Union
+from typing import List, Optional, Union
 
 montage = mne.channels.make_standard_montage('standard_1005')
 ALL_MONTAGE_CHS = {ch.lower() for ch in montage.ch_names}
@@ -28,13 +27,17 @@ def detect_capabilities(obj: mne.io.Raw | mne.Epochs) -> dict:
     events_found, event_classes = extract_events(obj)
     motor_info = check_motor_channels(ch_names)
     has_standard_montage = check_standard_montage(ch_names)
-    available_modes = get_available_modes(ch_names, events_found, motor_info["motor_imagery_possible"])
+    # https://mne.tools/1.12/generated/mne.pick_types.html — count channels typed EEG
+    n_eeg = len(mne.pick_types(obj.info, eeg=True, exclude=[]))
+    available_modes = get_available_modes(ch_names, events_found, motor_info["motor_imagery_possible"],
+                                          n_eeg_channels=n_eeg)
 
     recommended_mode = get_recommended_mode(available_modes)
 
     return {
     "channels": ch_names,
     "n_channels": len(ch_names),
+    "n_eeg_channels": n_eeg,               # Sleep-EDF: 7 channels, 2 of them EEG
     "sampling_rate": sampling_freq,
     "duration_seconds": total_epochs_duration,
     "n_epochs": len(obj) if is_epochs else None,
@@ -96,19 +99,28 @@ def check_standard_montage(ch_names: List[str]) -> bool:
     
     
 
-def get_available_modes(ch_names: list, has_events: bool, motor_imagery_possible: bool) -> List[str]:
+def get_available_modes(ch_names: list, has_events: bool, motor_imagery_possible: bool,
+                        n_eeg_channels: Optional[int] = None) -> List[str]:
     """
     always includes "basic"
-    adds "spectral" if 4+ standard channels
+    adds "spectral" if there is at least one EEG channel (n_eeg_channels given), or —
+        when channel types are unknown — 4+ standard 10-20 names (the old rule)
     adds "motor_imagery" if C3+C4 present AND has_events
+
+    Why spectral no longer needs standard names: band power is computed per channel and
+    needs no electrode positions; only the scalp maps do, and band_topomaps already
+    returns None without a montage. The old 4-standard-names rule locked Sleep-EDF
+    (two bipolar EEG channels, Fpz-Cz and Pz-Oz) out of the mode sleep staging uses.
     """
 
     modes = ["basic"]
-    
-    data_channels = {ch.lower() for ch in ch_names}
-    matched = data_channels.intersection(ALL_MONTAGE_CHS)
-    
-    if len(matched) >= 4:
+
+    if n_eeg_channels is not None:
+        spectral_ok = n_eeg_channels >= 1
+    else:
+        data_channels = {ch.lower() for ch in ch_names}
+        spectral_ok = len(data_channels.intersection(ALL_MONTAGE_CHS)) >= 4
+    if spectral_ok:
         modes.append("spectral")
     
     if motor_imagery_possible and has_events:

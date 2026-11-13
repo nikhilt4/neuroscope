@@ -68,6 +68,34 @@ def list_moabb_datasets() -> list:
     return [{"id": key, **value} for key, value in MOABB_DATASETS.items()]
 
 
+def restore_class_names(epochs, labels) -> "mne.BaseEpochs":
+    """
+    Rebuilds epochs.event_id from MOABB's per-trial `labels`, so downstream code
+    sees {'left_hand': 1, ...} instead of {'1': 1, ...}.
+
+    Verified on BNCI2014_001 subject 1 (MOABB 1.5.0): event codes 1–4 pair
+    one-to-one with left_hand / right_hand / feet / tongue across all 576 trials.
+
+    The mapping is only applied if every code maps to exactly one label and vice
+    versa. Anything else means the codes and labels disagree, and guessing would
+    put the wrong name on a class — worse than showing the number.
+    """
+    codes = epochs.events[:, 2].tolist()
+    names = [str(label) for label in labels]
+    if len(codes) != len(names):
+        return epochs
+
+    code_to_name: dict = {}
+    for code, name in zip(codes, names):
+        if code_to_name.setdefault(int(code), name) != name:
+            return epochs                          # one code, two names
+    if len(set(code_to_name.values())) != len(code_to_name):
+        return epochs                              # two codes, one name
+
+    epochs.event_id = {name: code for code, name in sorted(code_to_name.items())}
+    return epochs
+
+
 def fetch_moabb_dataset(dataset_name: str, subjects: list, n_classes: Optional[int] = None):
     """
     Fetches and preprocesses a MOABB dataset using the correct paradigm class,
@@ -107,13 +135,16 @@ def fetch_moabb_dataset(dataset_name: str, subjects: list, n_classes: Optional[i
         else:
             paradigm = paradigm_class()
 
+        # https://moabb.neurotechx.com/docs/generated/moabb.paradigms.MotorImagery.html (MOABB 1.5)
+        # With return_epochs=True the EpochsArray carries event_id {'1': 1, '2': 2, ...};
+        # the real class names only survive in the separate `labels` array.
         epochs, labels, metadata = paradigm.get_data(
             dataset=dataset,
             subjects=subjects,
             return_epochs=True
         )
 
-        return epochs  # mne.Epochs, same contract as limo/kiloword/FIF loaders
+        return restore_class_names(epochs, labels)  # same contract as limo/kiloword/FIF loaders
 
     except HTTPException:
         raise

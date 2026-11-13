@@ -2,13 +2,15 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceArea, ResponsiveContainer,
 } from "recharts";
+import { prettyClass } from "./results/metrics";
 
 const BAND_COLORS = {
   delta: "#f3f4f6", theta: "#eef2ff", alpha: "#e0e7ff",
   beta: "#f3f4f6", gamma: "#fafafa",
 };
 
-const CLASS_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+// same family as the results palette: indigo, pink, sky, violet, green
+const CLASS_COLORS = ["#4f46e5", "#ec4899", "#38bdf8", "#8b5cf6", "#34c77b"];
 
 function PSDChart({ psd }) {
   if (!psd) return null;
@@ -35,13 +37,7 @@ function PSDChart({ psd }) {
   
 
   return (
-    <div className="chart-block">
-      <h3 className="subheading">Power Spectral Density</h3>
-      <p className="group-hint">
-        Average power at each frequency, per class. Separation between curves
-        means the classes differ in frequency content — which is what the
-        band-power features pick up.
-      </p>
+    <div>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={data} margin={{ top: 10, right: 20, bottom: 40, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -65,11 +61,15 @@ function PSDChart({ psd }) {
                    contentStyle={{ fontSize: 12, borderRadius: 8 }} />
           <Legend wrapperStyle={{ fontSize: 12, paddingTop: 20 }} />
           {names.map((n, i) => (
-            <Line key={n} type="monotone" dataKey={n} dot={false} strokeWidth={1.8}
+            <Line key={n} type="monotone" dataKey={n} name={prettyClass(n)} dot={false} strokeWidth={1.8}
                   stroke={CLASS_COLORS[i % CLASS_COLORS.length]} />
           ))}
         </LineChart>
       </ResponsiveContainer>
+      <p className="rp-note">
+        Average power at each frequency, per class. Where the curves separate, the classes differ in
+        frequency content, which is what band-power features pick up.
+      </p>
     </div>
   );
 }

@@ -46,11 +46,16 @@ def _rename_annotations(raw: mne.io.Raw, mapping: Optional[dict]) -> mne.io.Raw:
     return raw
 
 
-def _extract_events(raw: mne.io.Raw, include_events: Optional[list] = None):
+def _extract_events(raw: mne.io.Raw, include_events: Optional[list] = None,
+                    chunk_duration: Optional[float] = None):
     """
     Pulls events from a stim channel if present, else from annotations.
     include_events restricts to named classes — this is what keeps 'rest'
     out of an otherwise-binary motor imagery task.
+
+    chunk_duration splits each annotation into back-to-back events of that length
+    (mne.events_from_annotations(chunk_duration=...), MNE 1.12). Sleep staging needs it:
+    one hypnogram annotation can cover 40 min, and without chunking it became ONE trial.
     """
     events = None
     try:
@@ -76,8 +81,9 @@ def _extract_events(raw: mne.io.Raw, include_events: Optional[list] = None):
     try:
         if include_events:
             requested = {name: i + 1 for i, name in enumerate(include_events)}
-            return mne.events_from_annotations(raw, event_id=requested, verbose=False)
-        return mne.events_from_annotations(raw, verbose=False)
+            return mne.events_from_annotations(raw, event_id=requested,
+                                               chunk_duration=chunk_duration, verbose=False)
+        return mne.events_from_annotations(raw, chunk_duration=chunk_duration, verbose=False)
     except Exception as e:
         raise HTTPException(
             status_code=400,
@@ -156,7 +162,8 @@ def preprocess_raw(
             raw, tmin, tmax, baseline,
             events=events, event_id=event_id,
             include_events=config.get("include_events"),                    # NEW
-            picks=config.get("picks", "eeg")                               # NEW
+            picks=config.get("picks", "eeg"),                              # NEW
+            chunk_duration=config.get("event_chunk_duration"),
         )
         
         
@@ -233,9 +240,10 @@ def _epoch_raw(
     events=None, event_id=None,
     include_events=None,
     picks="eeg",
+    chunk_duration=None,
 ) -> mne.Epochs:
     if events is None or event_id is None:
-        events, event_id = _extract_events(raw, include_events)
+        events, event_id = _extract_events(raw, include_events, chunk_duration=chunk_duration)
     elif include_events:
         event_id = {k: v for k, v in event_id.items() if k in include_events}
         if not event_id:

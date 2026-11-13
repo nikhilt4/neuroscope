@@ -1,0 +1,31 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Design tokens shared by the landing page (.lp) and the app (.wz).
+   Light indigo/blue theme with frosted-glass surfaces — approved 13 Nov 2026.
+   Change a colour here and both surfaces follow.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.lp, .wz {
+  --ink: #0d1530;
+  --ink-2: #2b3555;
+  --muted: #5e6987;
+  --faint: #8a93ad;
+  --line: rgba(99, 102, 241, 0.14);
+  --line-solid: #e6e8f4;
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-strong: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.95);
+  --primary: #4f46e5;
+  --primary-2: #6366f1;
+  --primary-soft: #eef0ff;
+  --blue: #3b82f6;
+  --violet: #8b5cf6;
+  --pink: #ec4899;
+  --green: #22a565;
+  --amber: #c27c0e;
+  --red: #dc2626;
+  --shadow: 0 1px 2px rgba(30, 41, 99, 0.04), 0 12px 32px -12px rgba(67, 56, 202, 0.18);
+  --shadow-lg: 0 2px 4px rgba(30, 41, 99, 0.04), 0 30px 70px -24px rgba(67, 56, 202, 0.35);
+  --radius: 18px;
+  --sans: "Plus Jakarta Sans", Inter, system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}

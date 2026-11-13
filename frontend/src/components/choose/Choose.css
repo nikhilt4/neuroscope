@@ -1,0 +1,39 @@
+/* Step 2 — choose an analysis mode. Uses the .wz tokens. Deliberately calm. */
+
+.ch-empty { color: var(--muted); font-style: italic; }
+
+.ch-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 860px) { .ch-grid { grid-template-columns: 1fr; } }
+
+.ch-card {
+  display: flex; flex-direction: column; text-align: left; cursor: pointer;
+  padding: 18px; border-radius: 18px; font: inherit;
+  color: var(--ink);   /* stays dark when selected — white-on-light was the old bug */
+  background: var(--glass); border: 1.5px solid var(--glass-border);
+  box-shadow: var(--shadow); backdrop-filter: blur(12px);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+.ch-card:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.ch-card:focus-visible { outline: 3px solid #a5b4fc; outline-offset: 3px; }
+.ch-card.is-active { border-color: var(--primary-2); background: #fff; box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12), var(--shadow); }
+.ch-card.is-locked { cursor: not-allowed; opacity: 0.55; box-shadow: none; }
+
+.ch-top { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.ch-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; color: var(--primary); background: var(--primary-soft); }
+.ch-icon svg { width: 20px; height: 20px; }
+.ch-card.is-active .ch-icon { color: #fff; background: linear-gradient(135deg, var(--primary), var(--blue)); }
+.ch-rec { padding: 3px 9px; border-radius: 999px; font: 600 0.7rem var(--sans); color: #15803d; background: #dcfce7; }
+.ch-radio {
+  margin-left: auto; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  border: 1.5px solid #cdd2ec; background: #fff; color: #fff;
+}
+.ch-card.is-active .ch-radio { border-color: transparent; background: var(--primary); }
+.ch-radio svg { width: 13px; height: 13px; }
+
+.ch-card h3 { margin: 0; font-size: 1.08rem; letter-spacing: -0.01em; }
+.ch-method { margin-top: 2px; font: 500 0.76rem var(--mono); color: var(--primary); }
+.ch-line { margin: 10px 0 0; font-size: 0.88rem; line-height: 1.5; color: var(--muted); }
+.ch-reason { margin: 10px 0 0; font-size: 0.8rem; font-weight: 600; color: #92400e; }
+
+.ch-note { display: flex; gap: 8px; align-items: center; margin: 16px 0 0; font-size: 0.84rem; color: var(--muted); }
+.ch-note svg { flex: none; width: 16px; height: 16px; color: var(--primary); }

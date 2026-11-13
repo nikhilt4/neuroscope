@@ -50,7 +50,12 @@ class UploadResponse(BaseModel):
     needs_bids_selection: bool = False
     is_epochs: bool = False
     dataset_name: Optional[str] = None
-    
+    # channels typed EEG — what decoders actually see (Sleep-EDF: 7 channels, 2 EEG)
+    n_eeg_channels: Optional[int] = None
+    # class names the analysis will use after the preset's renames/filters
+    # (eegbci events are T0/T1/T2 but the run classifies left_hand/right_hand)
+    analysis_classes: Optional[List[str]] = None
+
     
 class BidsSelection(BaseModel):
     session_id: str

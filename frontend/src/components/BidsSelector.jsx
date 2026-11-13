@@ -53,7 +53,10 @@ function BidsSelector({ uploadData, onConfigured }) {
     return <div className="error-box">No BIDS entities found in this dataset.</div>;
   }
 
-  const Picker = ({ label, value, setValue, options, required }) =>
+  // A plain function called as {picker(...)}, NOT a <Picker/> component defined
+  // inside render: that would be a new component type every render, so React would
+  // unmount and remount every <select> on each keystroke/selection.
+  const picker = ({ label, value, setValue, options, required }) =>
     options.length > 0 && (
       <div className="config-row">
         <label>{label}</label>
@@ -69,11 +72,13 @@ function BidsSelector({ uploadData, onConfigured }) {
   return (
     <div className="config-group" style={{ marginTop: 20 }}>
       <h4>Select Recording</h4>
-      <Picker label="Subject" value={subject} setValue={setSubject}
-              options={subjects} required />
-      <Picker label="Task" value={task} setValue={setTask} options={tasks} />
-      <Picker label="Session" value={session} setValue={setSession} options={sessions} />
-      <Picker label="Run" value={run} setValue={setRun} options={runs} />
+      {picker({ label: "Subject", value: subject, setValue: (v) => {
+        // a new subject may not have the previously chosen task/session/run
+        setSubject(v); setTask(""); setSession(""); setRun("");
+      }, options: subjects, required: true })}
+      {picker({ label: "Task", value: task, setValue: setTask, options: tasks })}
+      {picker({ label: "Session", value: session, setValue: setSession, options: sessions })}
+      {picker({ label: "Run", value: run, setValue: setRun, options: runs })}
 
       {error && <div className="error-box">{error}</div>}
 

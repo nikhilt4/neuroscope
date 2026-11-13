@@ -349,6 +349,22 @@ def run_classifier(
                 )
             estimator = EPOCH_PIPELINES[classifier_name](config)
             data = epochs_obj.get_data(copy=False)
+
+            # FgMDM's Fisher geodesic filter fits an LDA with n_components = n_classes - 1
+            # (hardcoded in pyriemann 0.12, FGDA._fit_lda) on the tangent space of the
+            # channel covariance, which has c(c+1)/2 features. With too few channels for the
+            # class count sklearn rejects it with an opaque message; say what's actually wrong.
+            if classifier_name == "riemann_fgmdm":
+                n_chans = data.shape[1]
+                n_ts = n_chans * (n_chans + 1) // 2
+                n_classes = len(np.unique(y))
+                if n_ts < n_classes - 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"FgMDM can't run on {n_chans} channels with {n_classes} classes: its "
+                               f"covariance features number {n_ts}, and it needs at least {n_classes - 1}. "
+                               f"Use riemann_mdm or a classical decoder, or data with more channels."
+                    )
             y_true = y
             y_pred = cross_val_predict(
                 estimator, data, y, cv=cv, n_jobs=1

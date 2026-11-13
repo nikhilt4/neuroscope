@@ -1,54 +1,84 @@
+import { Icon } from "./ui/Icons";
+import "./choose/Choose.css";
+
+/**
+ * Step 2 — pick the analysis mode.
+ *
+ * Cards are titled by the familiar task name, with the feature method it
+ * actually runs underneath (NEUROSCOPE_CONTEXT.md 2.3: "motor_imagery" really
+ * means "CSP"). Availability mirrors backend/core/detector.py get_available_modes();
+ * a locked card says why instead of disappearing.
+ */
+const MODES = [
+  {
+    id: "motor_imagery",
+    icon: "classify",
+    name: "Motor imagery",
+    method: "CSP spatial filtering",
+    line: "Finds where on the scalp your classes differ.",
+    locked: (d) => !d.motor_channels?.motor_imagery_possible
+      ? "Needs both C3 and C4"
+      : !d.events_found && !d.is_epochs ? "Needs event markers" : null,
+  },
+  {
+    id: "spectral",
+    icon: "results",
+    name: "Spectral",
+    method: "Band power",
+    line: "Strength of each brain rhythm, per channel.",
+    locked: () => "Needs at least one EEG channel",
+  },
+  {
+    id: "basic",
+    icon: "wave",
+    name: "Basic",
+    method: "Signal statistics",
+    line: "Simple per-channel stats. Works on any data.",
+    locked: () => null,
+  },
+];
+
 function ChooseSection({ data, onModeSelected, selectedMode }) {
   if (!data) {
-    return <p className="placeholder-text">Upload a file to see available modes.</p>;
+    return <p className="ch-empty">Load some data first and the available analyses will appear here.</p>;
   }
 
+  const available = new Set(data.available_modes || []);
+
   return (
-    <div>
-      <div className="summary-grid">
-        <div className="summary-card">
-          <span className="label">Channels</span>
-          <span className="value">{data.n_channels}</span>
-        </div>
-        <div className="summary-card">
-          <span className="label">Sampling Rate</span>
-          <span className="value">{data.sampling_rate} Hz</span>
-        </div>
-        <div className="summary-card">
-          <span className="label">Duration</span>
-          <span className="value">{data.duration_seconds?.toFixed(1)}s</span>
-        </div>
-        <div className="summary-card">
-          <span className="label">Events Found</span>
-          <span className="value">{data.events_found ? "Yes" : "No"}</span>
-        </div>
+    <div className="ch">
+      <div className="ch-grid" role="radiogroup" aria-label="Analysis mode">
+        {MODES.map((m) => {
+          const ok = available.has(m.id);
+          const reason = ok ? null : m.locked(data) || "Not available for this data";
+          const active = selectedMode === m.id;
+          return (
+            <button
+              key={m.id}
+              role="radio"
+              aria-checked={active}
+              disabled={!ok}
+              className={`ch-card ${active ? "is-active" : ""} ${ok ? "" : "is-locked"}`}
+              onClick={() => ok && onModeSelected(m.id)}
+            >
+              <div className="ch-top">
+                <span className="ch-icon"><Icon name={m.icon} /></span>
+                {m.id === data.recommended_mode && ok && <span className="ch-rec">Recommended</span>}
+                <span className="ch-radio" aria-hidden="true">{active && <Icon name="check" />}</span>
+              </div>
+              <h3>{m.name}</h3>
+              <span className="ch-method">{m.method}</span>
+              <p className="ch-line">{m.line}</p>
+              {reason && <p className="ch-reason">{reason}</p>}
+            </button>
+          );
+        })}
       </div>
 
-      {data.motor_channels && (
-        <p className="hint-text">
-          Motor channels detected:{" "}
-          {Object.entries(data.motor_channels)
-            .filter(([, present]) => present)
-            .map(([ch]) => ch)
-            .join(", ") || "none"}
-          {!data.available_modes.includes("motor_imagery") &&
-            " — motor imagery needs at least two of C3/C4/Cz."}
-        </p>
-          )}
-
-      <h3 className="subheading">Choose Analysis Mode</h3>
-      <div className="mode-row">
-        {data.available_modes.map((mode) => (
-          <button
-            key={mode}
-            className={`mode-btn ${selectedMode === mode ? "mode-btn-active" : ""}`}
-            onClick={() => onModeSelected(mode)}
-          >
-            {mode.replace("_", " ")}
-            {mode === data.recommended_mode && " ★"}
-          </button>
-        ))}
-      </div>
+      <p className="ch-note">
+        <Icon name="info" />
+        <span>Only affects the classical decoders. Riemannian and deep decoders read the raw trials in every mode.</span>
+      </p>
     </div>
   );
 }

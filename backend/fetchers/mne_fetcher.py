@@ -56,6 +56,71 @@ def list_mne_datasets() -> list:
     ]
 
 
+# Sleep-EDF stages (Rechtschaffen & Kales) -> AASM names. Stages 3 and 4 merge into N3,
+# as in MNE's sleep tutorial, where both map to one event id ("Sleep stage 3/4").
+# "Sleep stage ?" and "Movement time" are left out, so they never become classes.
+SLEEP_STAGE_NAMES = {
+    "Sleep stage W": "wake",
+    "Sleep stage 1": "N1",
+    "Sleep stage 2": "N2",
+    "Sleep stage 3": "N3",
+    "Sleep stage 4": "N3",
+    "Sleep stage R": "REM",
+}
+SLEEP_WAKE_MARGIN_S = 30 * 60
+
+
+def load_sleep_recording(psg_path, hyp_path) -> mne.io.BaseRaw:
+    """
+    One Sleep-EDF night, prepared the way MNE's sleep-staging tutorial prepares it
+    (https://mne.tools/stable/auto_tutorials/clinical/60_sleep.html, MNE 1.13 docs;
+    every call below checked against the installed MNE 1.12.1 with inspect.signature).
+
+    1. Channel types. Read with infer_types=True, so 'EEG Fpz-Cz' -> eeg, 'EOG horizontal'
+       -> eog, 'EMG submental' -> emg, 'Resp oro-nasal' -> resp, 'Temp rectal' -> temperature.
+       Without it all 7 channels loaded as 'eeg' and the features included body temperature.
+       DIFFERENCE from the tutorial: 'Event marker' is loaded as misc, not stim. Our event
+       extraction reads a stim channel before annotations, so a stim marker would override
+       the hypnogram.
+    2. Wake trimming. A Sleep-EDF night is ~2/3 wake (subject 1: 15.5 of 23.4 h). The
+       tutorial keeps only 30 min of wake before the first sleep stage and 30 min after the
+       last. Without it a classifier that always says "wake" scores ~66%.
+    3. Stage names. R&K labels become AASM names, with stages 3 and 4 merged into N3.
+
+    The 30-s windows themselves come from the preset (event_chunk_duration=30), which the
+    preprocessor passes to mne.events_from_annotations(chunk_duration=30.0), as in the tutorial.
+    """
+    raw = mne.io.read_raw_edf(psg_path, infer_types=True, misc=["Event marker"],
+                              preload=True, verbose=False)
+    raw.set_annotations(prepare_sleep_annotations(mne.read_annotations(hyp_path)), emit_warning=False)
+    return raw
+
+
+def prepare_sleep_annotations(annotations: mne.Annotations) -> mne.Annotations:
+    """Wake trimming + R&K -> AASM renaming for one hypnogram (see load_sleep_recording)."""
+    sleep = [i for i, d in enumerate(annotations.description)
+             if d in SLEEP_STAGE_NAMES and d != "Sleep stage W"]
+    if sleep:
+        first, last = sleep[0], sleep[-1]
+        # Same 30-min margins as the tutorial's annot.crop(annot[1]["onset"] - 30*60,
+        # annot[-2]["onset"] + 30*60), but located by stage name instead of position,
+        # so it doesn't rely on the night starting and ending with exactly one wake block.
+        annotations.crop(
+            annotations.onset[first] - SLEEP_WAKE_MARGIN_S,
+            annotations.onset[last] + annotations.duration[last] + SLEEP_WAKE_MARGIN_S,
+            emit_warning=False,
+        )
+
+    keep = [i for i, d in enumerate(annotations.description) if d in SLEEP_STAGE_NAMES]
+    annotations = annotations[keep]
+    # Annotations.rename raises for mapping keys that aren't present (MNE 1.12), and not
+    # every night has every stage: Sleep-EDF subject 4 has no "Sleep stage 4". Only pass
+    # the labels this hypnogram actually contains.
+    present = set(annotations.description)
+    annotations.rename({k: v for k, v in SLEEP_STAGE_NAMES.items() if k in present})
+    return annotations
+
+
 def fetch_mne_dataset(dataset_name: str, subjects: list, runs: list = None):
     if dataset_name not in MNE_DATASETS:
         raise HTTPException(status_code=400, detail=f"Unknown MNE dataset: {dataset_name}")
@@ -76,10 +141,7 @@ def fetch_mne_dataset(dataset_name: str, subjects: list, runs: list = None):
         elif dataset_name == "sleep_physionet":
             paths = sleep_physionet.age.fetch_data(subjects=[subject], recording=[1], verbose=False)
             psg_path, hyp_path = paths[0]
-            raw = mne.io.read_raw_edf(psg_path, preload=True, verbose=False)
-            annotations = mne.read_annotations(hyp_path)
-            raw.set_annotations(annotations, emit_warning=False)
-            return raw
+            return load_sleep_recording(psg_path, hyp_path)
 
         elif dataset_name == "ssvep":
             from mne.datasets import ssvep

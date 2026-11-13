@@ -1,208 +1,159 @@
-// function ResultsSection({ results }) {
-//   if (!results) {
-//     return <p className="placeholder-text">Run the analysis above to see results.</p>;
-//   }
-
-//   const best = results.classifiers.reduce((a, b) => (a.accuracy > b.accuracy ? a : b));
-
-//   return (
-//     <div>
-//       <div className="summary-grid">
-//         <div className="summary-card">
-//           <span className="label">File</span>
-//           <span className="value" style={{ fontSize: "1rem" }}>{results.dataset_summary.file}</span>
-//         </div>
-//         <div className="summary-card">
-//           <span className="label">Duration</span>
-//           <span className="value">{results.dataset_summary.duration}</span>
-//         </div>
-//         <div className="summary-card">
-//           <span className="label">Channels</span>
-//           <span className="value">{results.dataset_summary.channels}</span>
-//         </div>
-//         <div className="summary-card">
-//           <span className="label">Epochs</span>
-//           <span className="value">{results.dataset_summary.epochs}</span>
-//         </div>
-//       </div>
-
-//       <h3 className="subheading">Classifier Comparison</h3>
-//       <table className="results-table">
-//         <thead>
-//           <tr>
-//             <th>Classifier</th>
-//             <th>Accuracy</th>
-//             <th>Std Dev</th>
-//             <th>Inference Time</th>
-//           </tr>
-//         </thead>
-//         <tbody>
-//           {results.classifiers.map((c) => (
-//             <tr key={c.name} className={c.name === best.name ? "best-row" : ""}>
-//               <td>{c.name} {c.name === best.name && "★"}</td>
-//               <td>{c.accuracy.toFixed(1)}%</td>
-//               <td>± {c.std.toFixed(1)}%</td>
-//               <td>{c.time_ms}ms</td>
-//             </tr>
-//           ))}
-//         </tbody>
-//       </table>
-
-//       <div className="results-actions">
-//         <button className="primary-btn">Download PDF Report</button>
-//       </div>
-//     </div>
-//   );
-// }
-
-// export default ResultsSection;
-
-
-import { useState } from "react";
-import AccuracyChart from "./AccuracyChart";
-import ConfusionMatrix from "./ConfusionMatrix";
+import { useEffect, useState } from "react";
 import ParamsExport from "./ParamsExport";
 import PSDChart from "./PSDChart";
-import TopoMaps from "./TopoMaps";
+import { StatTile, AccuracyBars, ConfusionTable } from "./results/ResultParts";
+import { FAMILY, describeConfusion, macroF1, prettyClass } from "./results/metrics";
+import { MODE_LABELS } from "./wizard/SummaryPanel";
 
+const BAND_LABEL = { delta: "δ delta", theta: "θ theta", alpha: "α alpha", beta: "β beta", gamma: "γ gamma" };
 
-const CATEGORY_LABELS = {
-  feature: "Classical",
-  epoch: "Riemannian",
-  deep: "Deep Learning",
-};
+/**
+ * Step 5. Same layout and components as the landing-page preview
+ * (components/landing/ResultsPreview.jsx), which was approved as the design,
+ * fed by the live /analyze response instead of fixed numbers.
+ */
+function ResultsSection({ results, datasetLabel }) {
+  const [cmFor, setCmFor] = useState(results?.best_classifier ?? null);
+  const [band, setBand] = useState(null);
+  const [revealed, setRevealed] = useState(false);
 
-function ResultsSection({ results }) {
-
-    const [cmFor, setCmFor] = useState(results?.best_classifier ?? null);
+  // bars grow in from zero once mounted (the shared CSS animates on .is-in)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setRevealed(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   if (!results) {
-    return <p className="placeholder-text">Run the analysis above to see results.</p>;
+    return <p className="ch-empty">Run the analysis to see results here.</p>;
   }
 
   const summary = results.dataset_summary;
   const succeeded = results.classifiers.filter((c) => c.accuracy_mean !== null);
   const failed = results.classifiers.filter((c) => c.accuracy_mean === null);
-  const selectedResult = succeeded.find((c) => c.classifier === cmFor);
+  const best = succeeded.find((c) => c.classifier === results.best_classifier);
+  const shown = succeeded.find((c) => c.classifier === cmFor) || best;
 
-  // Chance level depends on class count, not a fixed 50% — a 4-class motor
-  // imagery task is at chance around 25%.
-  const chance = 1 / summary.classes.length;
+  // Chance = share of the largest class, not 1/k: with unbalanced classes,
+  // always guessing the biggest one already beats 1/k.
+  const counts = Object.values(summary.class_counts || {});
+  const chance = counts.length ? Math.max(...counts) / counts.reduce((a, b) => a + b, 0) : 1 / summary.classes.length;
   const pct = (v) => `${(v * 100).toFixed(1)}%`;
 
+  const rows = succeeded
+    .slice()
+    .sort((a, b) => b.accuracy_mean - a.accuracy_mean)
+    .map((c) => ({
+      name: c.classifier,
+      family: FAMILY[c.category] || "classical",
+      acc: c.accuracy_mean * 100,
+      sd: c.accuracy_std * 100,
+    }));
+
+  const bands = results.topomaps ? Object.keys(results.topomaps) : [];
+  const activeBand = band && results.topomaps?.[band] ? band : (bands.includes("alpha") ? "alpha" : bands[0]);
+  const trialsPerFold = best ? Math.round(summary.n_epochs / best.n_folds) : null;
+  const subject = summary.subjects?.length ? `Subject ${summary.subjects.join(", ")}` : "Your recording";
+
   return (
-    <div>
-      <div className="summary-grid">
-        <div className="summary-card">
-          <span className="label">Dataset</span>
-          <span className="value" style={{ fontSize: "1rem" }}>{summary.dataset}</span>
-        </div>
-        <div className="summary-card">
-          <span className="label">Epochs</span>
-          <span className="value">{summary.n_epochs}</span>
-        </div>
-        <div className="summary-card">
-          <span className="label">Channels</span>
-          <span className="value">{summary.n_channels}</span>
-        </div>
-        <div className="summary-card">
-          <span className="label">Sampling rate</span>
-          <span className="value">{summary.sampling_rate} Hz</span>
-        </div>
-        <div className="summary-card">
-          <span className="label">Subject</span>
-          <span className="value">{summary.subjects?.join(", ") ?? "—"}</span>
-        </div>
+    <div className={`rp-window ${revealed ? "is-in" : ""}`}>
+      <div className="rp-chrome">
+        <span className="rp-url">neuroscope / results</span>
+        <span className="rp-badge">{subject}</span>
       </div>
 
-      <div className="class-summary">
-        {summary.classes.map((name) => (
-          <span key={name} className="class-chip">
-            {name}: {summary.class_counts[name]} trials
-          </span>
-        ))}
-        <span className="chance-note">Chance level ≈ {pct(chance)}</span>
-      </div>
-
-      <h3 className="subheading">Classifier Comparison</h3>
-      <table className="results-table">
-        <thead>
-          <tr>
-            <th>Classifier</th>
-            <th>Type</th>
-            <th>Accuracy</th>
-            <th>Fold spread</th>
-          </tr>
-        </thead>
-        <tbody>
-          {succeeded
-            .slice()
-            .sort((a, b) => b.accuracy_mean - a.accuracy_mean)
-            .map((c) => {
-              const isBest = c.classifier === results.best_classifier;
-              const lo = Math.min(...c.fold_scores);
-              const hi = Math.max(...c.fold_scores);
-              return (
-                <tr key={c.classifier} className={isBest ? "best-row" : ""}>
-                  <td>{c.classifier} {isBest && "★"}</td>
-                  <td className="muted">{CATEGORY_LABELS[c.category] ?? c.category}</td>
-                  <td>
-                    {pct(c.accuracy_mean)} <span className="muted">± {pct(c.accuracy_std)}</span>
-                  </td>
-                  <td className="muted">{pct(lo)} – {pct(hi)}</td>
-                </tr>
-              );
-            })}
-        </tbody>
-      </table>
-
-      <AccuracyChart results={results.classifiers} chance={chance}
-          bestName={results.best_classifier} />
-
-      {selectedResult?.confusion_matrix && (
-        <div className="chart-block">
-          <div className="chart-head">
-            <h3 className="subheading">Confusion Matrix</h3>
-            <select value={cmFor} onChange={(e) => setCmFor(e.target.value)}>
-              {succeeded.map((c) => (
-                <option key={c.classifier} value={c.classifier}>{c.classifier}</option>
-              ))}
-            </select>
-          </div>
-          <ConfusionMatrix matrix={selectedResult.confusion_matrix}
-                           classNames={summary.classes} />
-        </div>
-      )}
-
-      {results.psd && <PSDChart psd={results.psd} />}
-
-      {results.topomaps && <TopoMaps topomaps={results.topomaps} />}
-
-
-      {/* run_all_classifiers isolates failures so one broken classifier doesn't
-          kill the batch — surface them rather than silently dropping rows */}
-      {failed.length > 0 && (
-        <div className="failed-list">
-          <h4>Did not run</h4>
-          {failed.map((c) => (
-            <p key={c.classifier} className="error-line">
-              <strong>{c.classifier}</strong>: {c.error}
+      <div className="rp-body">
+        <div className="rp-title-row">
+          <div>
+            <h3>{datasetLabel || summary.dataset} · {MODE_LABELS[results.mode] || results.mode}</h3>
+            <p>
+              {summary.n_epochs} trials · {summary.n_channels} channels · {summary.sampling_rate} Hz ·{" "}
+              {summary.classes.length} classes{best ? ` · ${best.n_folds}-fold cross-validation` : ""}
             </p>
-          ))}
+          </div>
         </div>
-      )}
 
-      {succeeded.length > 1 && (
-        <p className="interpretation">
-          Differences smaller than the ± spread aren't meaningful at{" "}
-          {succeeded[0].n_folds} folds over {summary.n_epochs} epochs — roughly{" "}
-          {Math.round(summary.n_epochs / succeeded[0].n_folds)} trials per fold, so a
-          single trial changing sides moves accuracy by about{" "}
-          {pct(1 / (summary.n_epochs / succeeded[0].n_folds))}.
-        </p>
-      )}
+        {best && (
+          <div className="rp-stats">
+            <StatTile tone="blue" icon="%" label="Best accuracy" value={pct(best.accuracy_mean)} sub={best.classifier} />
+            <StatTile tone="green" icon="±" label="Fold spread" value={pct(best.accuracy_std)}
+                      sub={`${pct(Math.min(...best.fold_scores))} – ${pct(Math.max(...best.fold_scores))}`} />
+            <StatTile tone="violet" icon="F1" label="Macro F1"
+                      value={best.confusion_matrix ? macroF1(best.confusion_matrix).toFixed(2) : "—"} />
+            <StatTile tone="slate" icon="∅" label="Chance level" value={pct(chance)}
+                      sub={counts.length ? "largest class share" : null} />
+          </div>
+        )}
 
-      <ParamsExport results={results} />
+        {succeeded.length > 0 && (
+          <div className="rp-grid">
+            <section className="rp-card">
+              <h4>Accuracy by decoder <span>click one to inspect it</span></h4>
+              <AccuracyBars rows={rows} chance={chance * 100} selected={shown?.classifier}
+                            onSelect={setCmFor} best={results.best_classifier} showSd />
+            </section>
+
+            {shown?.confusion_matrix && (
+              <section className="rp-card">
+                <h4>Confusion matrix <span>{shown.classifier} · row %</span></h4>
+                <ConfusionTable matrix={shown.confusion_matrix} classNames={summary.classes} />
+                <p className="rp-note">{describeConfusion(shown.confusion_matrix, summary.classes)}</p>
+              </section>
+            )}
+          </div>
+        )}
+
+        {failed.length > 0 && (
+          // run_all_classifiers isolates failures so one broken decoder doesn't sink
+          // the batch; say which ones didn't run rather than silently dropping them
+          <section className="rp-card rp-failed">
+            <h4>Did not run <span>{failed.length} decoder{failed.length > 1 ? "s" : ""}</span></h4>
+            <ul>{failed.map((c) => <li key={c.classifier}><b>{c.classifier}</b>: {c.error}</li>)}</ul>
+          </section>
+        )}
+
+        {activeBand && (
+          <section className="rp-card rp-topo">
+            <h4>
+              Scalp maps by class
+              <span className="rp-tabs" role="tablist">
+                {bands.map((b) => (
+                  <button key={b} role="tab" aria-selected={b === activeBand}
+                          className={b === activeBand ? "is-active" : ""} onClick={() => setBand(b)}>
+                    {BAND_LABEL[b] || b}
+                  </button>
+                ))}
+              </span>
+            </h4>
+            <img src={`data:image/png;base64,${results.topomaps[activeBand].image}`}
+                 alt={`${activeBand} band power for each class, relative to the average across classes`} />
+            <p className="rp-note">
+              Power in the {activeBand} band ({results.topomaps[activeBand].range_hz.join("–")} Hz) per class, relative
+              to the average. Blue means less power than average and red more, so the pattern shows where the classes differ.
+            </p>
+          </section>
+        )}
+
+        {results.psd && (
+          <section className="rp-card">
+            <h4>Power spectrum by class <span>log₁₀ power</span></h4>
+            <PSDChart psd={results.psd} />
+          </section>
+        )}
+
+        {succeeded.length > 1 && trialsPerFold && (
+          <p className="rp-caveat">
+            <b>Reading the differences:</b> with about {trialsPerFold} trials per fold, one trial changing sides moves
+            accuracy by roughly {pct(1 / trialsPerFold)}. Gaps smaller than the ± spread aren&apos;t meaningful.
+            {summary.subjects?.length ? ` Results are for ${subject.toLowerCase()} only; other people can score very differently.` : ""}
+          </p>
+        )}
+
+        <section className="rp-card">
+          <ParamsExport results={results} />
+        </section>
+
+        <p className="rp-caveat">Classes: {summary.classes.map((c) => `${prettyClass(c)} (${summary.class_counts?.[c] ?? "?"})`).join(" · ")}</p>
+      </div>
     </div>
   );
 }
