@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./ui/Icons";
+import { DEMO } from "../demo/config";
 
 const CLASSIFIER_GROUPS = [
   {
@@ -159,13 +160,14 @@ function EvaluationCard({ capabilities, evaluation, setEvaluation }) {
   const loaded = capabilities.subjects?.[0] ?? 1;
   const all = Array.from({ length: total }, (_, i) => i + 1);
   // a sensible starting group: everyone for small datasets, otherwise the loaded subject + 4 more
-  const starter = total <= 12 ? all : [...new Set([loaded, ...all])].slice(0, 5).sort((a, b) => a - b);
+  const starter = DEMO || total <= 12 ? all : [...new Set([loaded, ...all])].slice(0, 5).sort((a, b) => a - b);
 
   const choose = (type) => setEvaluation((prev) => ({
     type,
     subjects: type === "single" ? [] : (prev.subjects.length >= 2 ? prev.subjects : starter),
   }));
-  const toggleSubject = (s) => setEvaluation((prev) => ({
+  // the demo recorded every multi-subject run on all subjects, so the group is fixed
+  const toggleSubject = (s) => !DEMO && setEvaluation((prev) => ({
     ...prev,
     subjects: prev.subjects.includes(s) ? prev.subjects.filter((x) => x !== s) : [...prev.subjects, s].sort((a, b) => a - b),
   }));
@@ -186,18 +188,20 @@ function EvaluationCard({ capabilities, evaluation, setEvaluation }) {
         <div className="cl-eval-subjects">
           <div className="cl-eval-head">
             <span>Subjects <b>{evaluation.subjects.length}</b> of {total}</span>
-            <button className="link-btn" onClick={() => setEvaluation((p) => ({ ...p, subjects: all }))}>All</button>
-            <button className="link-btn" onClick={() => setEvaluation((p) => ({ ...p, subjects: starter }))}>Reset</button>
+            {!DEMO && <>
+              <button className="link-btn" onClick={() => setEvaluation((p) => ({ ...p, subjects: all }))}>All</button>
+              <button className="link-btn" onClick={() => setEvaluation((p) => ({ ...p, subjects: starter }))}>Reset</button>
+            </>}
           </div>
           <div className="cl-eval-chips">
             {all.map((s) => (
               <button key={s} className={`cl-subj ${evaluation.subjects.includes(s) ? "is-on" : ""}`}
-                      onClick={() => toggleSubject(s)} aria-pressed={evaluation.subjects.includes(s)}>{s}</button>
+                      onClick={() => toggleSubject(s)} disabled={DEMO} aria-pressed={evaluation.subjects.includes(s)}>{s}</button>
             ))}
           </div>
           {evaluation.subjects.length < 2 && <p className="cl-fit cl-fit-block" style={{ marginLeft: 0 }}>Pick at least two subjects.</p>}
           <p className="config-hint">
-            Subjects not used before are downloaded first (per-subject size as on the dataset card), so the
+            {DEMO ? "The online demo recorded this with all subjects. " : null}Subjects not used before are downloaded first (per-subject size as on the dataset card), so the
             first run can take a while.{evaluation.type === "cross_subject" && " Cross-subject runs train on several people's trials at once, so they also use more memory."}
           </p>
         </div>

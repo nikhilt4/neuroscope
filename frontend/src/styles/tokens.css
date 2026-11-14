@@ -1,10 +1,10 @@
 /* ─────────────────────────────────────────────────────────────────────────────
-   Design tokens shared by the landing page (.lp) and the app (.wz).
+   Design tokens shared by the landing page (.lp), the app (.wz) and the guide (.gd).
    Light indigo/blue theme with frosted-glass surfaces — approved 13 Nov 2026.
    Change a colour here and both surfaces follow.
    ───────────────────────────────────────────────────────────────────────────── */
 
-.lp, .wz {
+.lp, .wz, .gd {
   --ink: #0d1530;
   --ink-2: #2b3555;
   --muted: #5e6987;

@@ -60,7 +60,9 @@
 .lp-nav-links { display: flex; gap: 6px; margin-left: auto; }
 .lp-nav-links a { padding: 8px 14px; border-radius: 999px; font-size: 0.92rem; font-weight: 500; color: var(--ink-2); }
 .lp-nav-links a:hover { color: var(--primary); background: rgba(99, 102, 241, 0.08); }
-@media (max-width: 760px) { .lp-nav-links { display: none; } .lp-nav .lp-btn { margin-left: auto; } }
+.lp-guide-btn { margin-left: auto; }
+.lp-nav-links + .lp-guide-btn { margin-left: 0; }
+@media (max-width: 760px) { .lp-nav-links { display: none; } .lp-guide-btn { margin-left: auto; } }
 
 /* ── hero ─────────────────────────────────────────────────────────────────── */
 .lp-hero {

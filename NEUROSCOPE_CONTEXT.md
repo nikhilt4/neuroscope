@@ -618,6 +618,9 @@ default to `update_path=True` and are safe.
       several GB and currently exists in two copies (braindecode's and MOABB's). Needs LRU
       eviction and a per-dataset size limit, plus awareness of MOABB's `C-/` path.
 - [ ] **Orphaned temp files** — every failed download leaves a `tmp*` file behind.
+- [ ] **Summary panel shows one subject's trial count on multi-subject runs** — e.g. "Trials 576"
+      beside a 9-subject result (5184 trials). SummaryPanel reads the fetch response, not the
+      result. Seen in the online demo, 14 Nov.
 
 ### Correctness
 - [x] ~~`get_preset` returns the live dict~~ — deepcopy, 13 Nov.
@@ -883,6 +886,33 @@ resolution, and "Did not run" surfacing for failed classifiers.
 ---
 
 ## 11. Deployment notes
+
+### Online demo — BUILT (14 Nov 2026), static, no backend
+
+Hugging Face Docker Spaces need a paid plan for personal accounts (PRO, $9/month — per
+https://huggingface.co/docs/hub/spaces-overview, checked 14 Nov), so the public version is a
+**static demo build** that runs with no server and can go on any free static host.
+
+- `npm run build:demo` (in `frontend/`) → `frontend/dist-demo/`, relative paths (`--base ./`),
+  so it works from any URL or sub-folder. `npm run dev:demo` runs it locally. `.env.demo` sets
+  `VITE_DEMO=1` and `VITE_REPO_URL` (empty hides the "Get the full app" link — fill in once the
+  repo is public).
+- `src/api.js` exports `DEMO ? demo.x : live_x` for every call; `src/demo/demoApi.js` answers
+  from `public/demo/`. Simulated jobs report the same stages as the real ones. Playback replays
+  an int16 excerpt through the same frame protocol as `stream_frames`. Uploads, other datasets
+  and other subjects give a clear "needs the full app" message.
+- What's recorded (`python -m backend.demo.record_demo`, backend running, ~65 min):
+  BCI IV 2a within- and cross-subject over subjects 1–9 (MI mode, all decoders except EEGNet);
+  best subject by tangent space = **subject 3 (88.5%)** in all 4 modes with all 14 decoders;
+  Sleep-EDF subject 1 in all 4 modes; a 30-min Sleep-EDF playback excerpt from 11.25 h
+  (19 stage markers). 4.2 MB total. Per-subject tangent space: 83.3 / 63.7 / 88.5 / 70.1 /
+  49.5 / 62.3 / 85.4 / 87.7 / 79.2 (S1–S9), mean 74.4 ± 12.9.
+- Limits, stated in the UI by `src/demo/DemoNote.jsx`: preprocessing and hyperparameter edits
+  don't change results; multi-subject is fixed to all 9 subjects.
+- `backend/tests/test_demo_data.py` checks the recording is complete and consistent.
+- Re-record after any change that alters results, or the demo shows stale numbers.
+
+### Full hosted backend (later)
 
 - Backend is heavy (torch, MNE, MOABB, pyriemann). Options: Hugging Face Spaces (Docker),
   Render, Fly.io with CPU-only torch. EEGNet on a free CPU tier will be slow — cap epochs or

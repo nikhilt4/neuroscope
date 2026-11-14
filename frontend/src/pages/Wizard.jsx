@@ -9,6 +9,7 @@ import SummaryPanel from "../components/wizard/SummaryPanel";
 import PlaybackView from "../components/playback/PlaybackView";
 import { Icon, Logo } from "../components/ui/Icons";
 import * as api from "../api";
+import DemoNote from "../demo/DemoNote";
 import "./Wizard.css";
 
 const STEPS = [
@@ -29,7 +30,7 @@ const STEPS = [
     sub: "How each decoder did, and what the data looks like." },
 ];
 
-function Wizard({ onExit }) {
+function Wizard({ onExit, onGuide }) {
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState("forward");
   const [readyData, setReadyData] = useState(null);
@@ -133,6 +134,7 @@ function Wizard({ onExit }) {
           <Logo className="wz-logo" />NeuroScope
         </button>
         <Stepper steps={STEPS} current={step} reachable={reachable} onGo={goTo} />
+        {onGuide && <button className="wz-exit" onClick={onGuide}><Icon name="info" /><span>Guide</span></button>}
         <button className="wz-exit" onClick={onExit}><Icon name="x" /><span>Exit</span></button>
       </header>
 
@@ -153,6 +155,8 @@ function Wizard({ onExit }) {
             <h1>{meta.title}</h1>
             <p className="wz-sub">{meta.sub}</p>
           </div>
+
+          <DemoNote step={step} results={results} />
 
           {error && (
             <div className="wz-alert" role="alert">

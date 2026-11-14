@@ -1,0 +1,1 @@
+{"bandpass_low":0.3,"bandpass_high":35.0,"notch_enabled":false,"event_chunk_duration":30.0,"epoch_tmin":0.0,"epoch_tmax":29.99,"baseline_enabled":false,"reference":"none","ica_enabled":false,"montage":null}

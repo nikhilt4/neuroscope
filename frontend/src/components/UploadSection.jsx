@@ -7,6 +7,7 @@ import DetectedCard from "./upload/DetectedCard";
 import { Icon } from "./ui/Icons";
 import * as api from "../api";
 import "./upload/Upload.css";
+import { DEMO } from "../demo/config";
 
 const UPLOADERS = { single: (f) => api.uploadSingle(f[0]), multi: api.uploadMulti, bids: (f) => api.uploadBids(f[0]) };
 
@@ -72,13 +73,15 @@ function UploadSection({ loaded, onReady, onPlay }) {
           </span>
           <em className="up-route-badge">Quickest start</em>
         </button>
-        <button role="tab" aria-selected={route === "file"}
+        {/* the demo has no server to upload to */}
+        <button role="tab" aria-selected={route === "file"} disabled={DEMO}
                 className={`up-route ${route === "file" ? "is-active" : ""}`} onClick={() => setRoute("file")}>
           <span className="up-route-icon"><Icon name="upload" /></span>
           <span>
             <b>Upload your own data</b>
             <small>EDF, BDF, GDF, FIF, BrainVision, CSV or a BIDS dataset as a .zip.</small>
           </span>
+          {DEMO && <em className="up-route-badge up-route-badge-muted">Full app only</em>}
         </button>
       </div>
 

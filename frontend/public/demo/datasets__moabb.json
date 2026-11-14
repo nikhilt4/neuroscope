@@ -1,0 +1,1 @@
+{"datasets":[{"id":"BNCI2014_001","name":"BCI Competition IV 2a","n_subjects":9,"n_sessions":2,"n_channels":25,"n_eeg_channels":22,"sampling_rate":250,"reference":"left_mastoid","task":"motor_imagery","classes":["left_hand","right_hand","feet","tongue"],"trial_duration_s":4.0,"demo_subject":3}]}

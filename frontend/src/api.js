@@ -1,4 +1,8 @@
-const API_BASE = "http://127.0.0.1:8000";
+import { DEMO } from "./demo/config";
+import * as demo from "./demo/demoApi";
+
+// VITE_API_BASE lets a deployed build point at a hosted backend; local dev uses uvicorn's default.
+const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
 /**
  * All backend errors arrive as {"detail": "..."} from FastAPI's HTTPException.
@@ -44,60 +48,60 @@ function postForm(path, formData) {
 }
 
 // ── Upload ────────────────────────────────────────────────────────────────
-export function uploadSingle(file) {
+function live_uploadSingle(file) {
   const fd = new FormData();
   fd.append("file", file);
   return postForm("/upload/single", fd);
 }
 
-export function uploadMulti(files) {
+function live_uploadMulti(files) {
   const fd = new FormData();
   Array.from(files).forEach((f) => fd.append("files", f));
   return postForm("/upload/multi", fd);
 }
 
-export function uploadBids(zipFile) {
+function live_uploadBids(zipFile) {
   const fd = new FormData();
   fd.append("file", zipFile);
   return postForm("/upload/bids", fd);
 }
 
 // ── Configuration round-trips ─────────────────────────────────────────────
-export const configureColumns = (mapping) => postJSON("/upload/configure", mapping);
-export const configureMat = (mapping) => postJSON("/upload/configure-mat", mapping);
-export const configureBids = (selection) => postJSON("/upload/bids-configure", selection);
+const live_configureColumns = (mapping) => postJSON("/upload/configure", mapping);
+const live_configureMat = (mapping) => postJSON("/upload/configure-mat", mapping);
+const live_configureBids = (selection) => postJSON("/upload/bids-configure", selection);
 
 // ── Datasets ──────────────────────────────────────────────────────────────
-export const listDatasets = (source) => request(`/dataset/list/${source}`);
-export const fetchDataset = (payload) => postJSON("/dataset/fetch", payload);
+const live_listDatasets = (source) => request(`/dataset/list/${source}`);
+const live_fetchDataset = (payload) => postJSON("/dataset/fetch", payload);
 
 // ── Preprocessing + analysis ──────────────────────────────────────────────
-export function getPreset({ datasetName, mode = "basic", task } = {}) {
+function live_getPreset({ datasetName, mode = "basic", task } = {}) {
   const params = new URLSearchParams({ mode });
   if (datasetName) params.set("dataset_name", datasetName);
   if (task) params.set("task", task);
   return request(`/preprocessing/preset?${params}`);
 }
 
-export const analyze = (payload) => postJSON("/analyze", payload);
+const live_analyze = (payload) => postJSON("/analyze", payload);
 
 // ── Background jobs ───────────────────────────────────────────────────────
 // Fetches and analyses run as killable background processes on the server, so a
 // stalled download can be cancelled or time out instead of freezing the backend.
-export const startFetchJob = (payload) => postJSON("/jobs/fetch", payload);
-export const startAnalyzeJob = (payload) => postJSON("/jobs/analyze", payload);
-export const getJob = (jobId) => request(`/jobs/${jobId}`);
-export const cancelJob = (jobId) => postJSON(`/jobs/${jobId}/cancel`, {});
+const live_startFetchJob = (payload) => postJSON("/jobs/fetch", payload);
+const live_startAnalyzeJob = (payload) => postJSON("/jobs/analyze", payload);
+const live_getJob = (jobId) => request(`/jobs/${jobId}`);
+const live_cancelJob = (jobId) => postJSON(`/jobs/${jobId}/cancel`, {});
 
 // ── Playback ──────────────────────────────────────────────────────────────
-export const getPlaybackInfo = (sessionId) => request(`/playback/${sessionId}/info`);
+const live_getPlaybackInfo = (sessionId) => request(`/playback/${sessionId}/info`);
 
 /**
  * Opens a real-time replay stream (Server-Sent Events). onMessage receives each
  * parsed frame ({type: "start"|"data"|"event"|"end", ...}). Returns a close()
  * function; pausing, seeking or changing speed = close, then open again.
  */
-export function openPlayback(sessionId, { start = 0, speed = 1, channels = [], prefill = 0, preview = false },
+function live_openPlayback(sessionId, { start = 0, speed = 1, channels = [], prefill = 0, preview = false },
                              onMessage, onError) {
   // prefill: the server first sends the `prefill` seconds before `start`, so a seek shows a
   // full screen at once; preview: stop after that (scrubbing while paused)
@@ -137,3 +141,23 @@ export async function runJob(startPromise, onUpdate) {
     }
   }
 }
+
+// ── Exports ───────────────────────────────────────────────────────────────
+// The online demo (DEMO, set at build time) swaps every call for the recorded stand-in
+// in demo/demoApi.js. Components import from here either way and never know.
+export const uploadSingle = DEMO ? demo.uploadSingle : live_uploadSingle;
+export const uploadMulti = DEMO ? demo.uploadMulti : live_uploadMulti;
+export const uploadBids = DEMO ? demo.uploadBids : live_uploadBids;
+export const getPreset = DEMO ? demo.getPreset : live_getPreset;
+export const openPlayback = DEMO ? demo.openPlayback : live_openPlayback;
+export const configureColumns = DEMO ? demo.configureColumns : live_configureColumns;
+export const configureMat = DEMO ? demo.configureMat : live_configureMat;
+export const configureBids = DEMO ? demo.configureBids : live_configureBids;
+export const listDatasets = DEMO ? demo.listDatasets : live_listDatasets;
+export const fetchDataset = DEMO ? demo.fetchDataset : live_fetchDataset;
+export const analyze = DEMO ? demo.analyze : live_analyze;
+export const startFetchJob = DEMO ? demo.startFetchJob : live_startFetchJob;
+export const startAnalyzeJob = DEMO ? demo.startAnalyzeJob : live_startAnalyzeJob;
+export const getJob = DEMO ? demo.getJob : live_getJob;
+export const cancelJob = DEMO ? demo.cancelJob : live_cancelJob;
+export const getPlaybackInfo = DEMO ? demo.getPlaybackInfo : live_getPlaybackInfo;

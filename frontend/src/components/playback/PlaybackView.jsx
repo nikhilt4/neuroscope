@@ -203,6 +203,8 @@ function PlaybackView({ sessionId, title, onClose }) {
         <p>
           Replaying the recording in real time · {info.sfreq} Hz · {fmtTime(info.duration_s)} long ·
           display filter {info.display_filter_hz[0]}–{info.display_filter_hz[1]} Hz
+          {/* the online demo ships an excerpt, not the whole night */}
+          {info.clip_start_s != null && <> · excerpt from {fmtTime(info.clip_start_s)} into a {fmtTime(info.recording_duration_s)} recording</>}
         </p>
       </div>
 

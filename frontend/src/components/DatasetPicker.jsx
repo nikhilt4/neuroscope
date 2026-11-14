@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import * as api from "../api";
 import BidsSelector from "./BidsSelector";
 import { Icon } from "./ui/Icons";
+import { DEMO } from "../demo/config";
 
 const SOURCES = [
   { id: "mne", label: "MNE", hint: "Reference datasets bundled with MNE-Python" },
@@ -27,6 +28,9 @@ const DATASET_NOTES = {
   Zhou2016: { size: "~85 MB", speed: "medium" },
   Schirrmeister2017: { size: "490 MB", measured: true, speed: "slow", warn: "Large per subject. The first fetch takes a while." },
 };
+
+// the demo recorded one MNE and one MOABB dataset; braindecode would be an empty tab
+const VISIBLE_SOURCES = DEMO ? SOURCES.filter((s) => s.id !== "braindecode") : SOURCES;
 
 const TASK_LABELS = { motor_imagery: "Motor imagery", spectral: "Spectral / sleep", erp: "ERP", ssvep: "SSVEP" };
 const SPEED_LABEL = { fast: "Fast", medium: "Medium", slow: "Slow" };
@@ -56,7 +60,7 @@ function DatasetPicker({ onReady }) {
 
   const chooseDataset = (ds) => {
     setSelected(ds);
-    setSubject(1);
+    setSubject(ds.demo_subject ?? 1);   // the demo has one recorded subject per dataset
     setBidsData(null);
     setError(null);
     // eegbci's run groups are different tasks: [4,8,12] left/right hand,
@@ -101,7 +105,7 @@ function DatasetPicker({ onReady }) {
   return (
     <div className="dp">
       <div className="dp-sources" role="tablist" aria-label="Dataset library">
-        {SOURCES.map((s) => (
+        {VISIBLE_SOURCES.map((s) => (
           <button key={s.id} role="tab" aria-selected={source === s.id}
                   className={`dp-source ${source === s.id ? "is-active" : ""}`} onClick={() => setSource(s.id)}>
             <b>{s.label}</b><small>{s.hint}</small>
@@ -165,16 +169,17 @@ function DatasetPicker({ onReady }) {
             <div className="dp-field">
               <label htmlFor="dp-subject">Subject</label>
               <div className="dp-stepper">
-                <button type="button" aria-label="Previous subject" disabled={isFetching}
+                <button type="button" aria-label="Previous subject" disabled={isFetching || DEMO}
                         onClick={() => setSubject((s) => clampSubject(Number(s) - 1))}>−</button>
                 <input id="dp-subject" type="number" min="1" max={maxSubject} value={subject}
-                       disabled={isFetching}
+                       disabled={isFetching || DEMO}
                        onChange={(e) => setSubject(e.target.value)} onBlur={() => setSubject(clampSubject(subject))} />
-                <button type="button" aria-label="Next subject" disabled={isFetching}
+                <button type="button" aria-label="Next subject" disabled={isFetching || DEMO}
                         onClick={() => setSubject((s) => clampSubject(Number(s) + 1))}>+</button>
                 {selected.n_subjects && <span className="dp-of">of {selected.n_subjects}</span>}
               </div>
               <small>
+                {DEMO && <><b>The online demo includes subject {selected.demo_subject}.</b> </>}
                 Which participant to analyse. BCI decoders are usually trained per person, and
                 accuracy varies a lot between people. On BCI IV 2a, subject 1 reaches ~83%; subject 5 only ~50%.
               </small>
@@ -205,6 +210,7 @@ function DatasetPicker({ onReady }) {
             <span className="up-hint">
               {isFetching
                 ? <><b>{job?.stage || "Starting…"}</b>. The first fetch downloads {notes.size || "the dataset"}; after that it&apos;s cached. Stops automatically after 10 minutes.</>
+                : DEMO ? "Recorded ahead of time, so it loads in a couple of seconds."
                 : `First fetch downloads ${notes.size || "the data"}; repeats come from the local cache.`}
             </span>
           </div>

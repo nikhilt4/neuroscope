@@ -4,6 +4,7 @@ import HeadMap from "../components/landing/HeadMap";
 import ResultsPreview from "../components/landing/ResultsPreview";
 import { Icon, Logo as LogoMark } from "../components/ui/Icons";
 import "./LandingPage.css";
+import { DEMO } from "../demo/config";
 
 const Svg = ({ name }) => <Icon name={name} />;
 const Logo = () => <LogoMark className="lp-logo" />;
@@ -82,7 +83,7 @@ function useReveal(rootRef) {
 }
 
 
-function LandingPage({ onStart }) {
+function LandingPage({ onStart, onGuide }) {
   const rootRef = useRef(null);
   useReveal(rootRef);
   const go = (id) => (e) => {
@@ -102,6 +103,8 @@ function LandingPage({ onStart }) {
           <a href="#why" onClick={go("why")}>Why</a>
           <a href="#formats" onClick={go("formats")}>Formats</a>
         </nav>
+        {/* a button, not a nav link: the nav links are hidden on phones, the guide shouldn't be */}
+        <button className="lp-btn lp-btn-ghost lp-btn-sm lp-guide-btn" onClick={onGuide}>Guide</button>
         <button className="lp-btn lp-btn-sm" onClick={onStart}>Launch app</button>
       </header>
 
@@ -111,7 +114,7 @@ function LandingPage({ onStart }) {
         <EegTraces className="lp-waves" channels={5} />
 
         <div className="lp-hero-text">
-          <p className="lp-eyebrow"><span className="lp-dot" />EEG analysis &amp; BCI platform</p>
+          <p className="lp-eyebrow"><span className="lp-dot" />EEG analysis &amp; BCI platform{DEMO && <> · online demo</>}</p>
           <h1 className="lp-title">NeuroScope</h1>
           <p className="lp-tagline">
             Every EEG format. Fourteen decoders.<br />
@@ -255,7 +258,9 @@ function LandingPage({ onStart }) {
       <section className="lp-final" data-reveal>
         <EegTraces className="lp-final-waves" channels={3} color="#ffffff" speed={0.4} />
         <h2>Ready to look inside your data?</h2>
-        <p>Start with a public dataset, with nothing to download or install, or upload your own recording.</p>
+        <p>{DEMO
+          ? "Explore two recorded datasets in the online demo: the full wizard, real results and live playback."
+          : "Start with a public dataset, with nothing to download or install, or upload your own recording."}</p>
         <button className="lp-btn lp-btn-light lp-btn-lg" onClick={onStart}>Start analysing →</button>
       </section>
 

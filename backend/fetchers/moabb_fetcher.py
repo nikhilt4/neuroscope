@@ -22,7 +22,9 @@ MOABB_DATASETS = {
         "trial_duration_s": 4.0,
     },
     "BNCI2014_002": {
-        "name": "BCI Competition IV 2b",
+        # NOT BCI Competition IV 2b (that's BNCI2014_004). MOABB 1.5 docstring: "BNCI 2014-002
+        # Motor Imagery dataset", Scherer et al. 2015 — right hand vs feet, 14 subjects, 15 ch.
+        "name": "BNCI 2014-002 Motor Imagery",
         "n_subjects": 14,
         "n_channels": 15,
         "sampling_rate": 512,

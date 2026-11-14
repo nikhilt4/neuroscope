@@ -1,0 +1,76 @@
+/* Guide page. Same tokens as the landing page and the app. */
+@import "../styles/tokens.css";
+
+.gd {
+  position: relative; min-height: 100vh; overflow-x: clip; color: var(--ink); font-family: var(--sans);
+  background: linear-gradient(180deg, #f3f5ff 0%, #f7f8ff 50%, #f4f6ff 100%);
+  -webkit-font-smoothing: antialiased;
+}
+.gd *, .gd *::before, .gd *::after { box-sizing: border-box; }
+.gd a { color: var(--primary); text-decoration-color: rgba(79, 70, 229, 0.35); text-underline-offset: 3px; }
+.gd-bg { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.gd-bg i { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.5; }
+.gd-bg i:nth-child(1) { width: 600px; height: 600px; left: -220px; top: -200px; background: #c7d2fe; }
+.gd-bg i:nth-child(2) { width: 520px; height: 520px; right: -200px; bottom: -160px; background: #dbeafe; }
+
+.gd-nav {
+  position: sticky; top: 12px; z-index: 30; width: min(1180px, calc(100% - 24px)); margin: 12px auto 0;
+  display: flex; align-items: center; gap: 14px; padding: 8px 10px 8px 18px; border-radius: 999px;
+  background: rgba(255,255,255,.82); border: 1px solid var(--glass-border); backdrop-filter: blur(16px); box-shadow: var(--shadow);
+}
+.gd-brand { display: inline-flex; align-items: center; gap: 9px; border: 0; background: none; cursor: pointer; font: 800 1.05rem var(--sans); color: var(--ink); }
+.gd-logo { width: 28px; height: 21px; color: var(--primary); }
+.gd-nav-title { padding: 3px 10px; border-radius: 999px; font: 600 0.74rem var(--mono); color: var(--primary); background: var(--primary-soft); }
+.gd-back { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: #fff; cursor: pointer;
+  padding: 8px 14px; border-radius: 999px; font: 500 0.88rem var(--sans); color: var(--ink-2); }
+.gd-back svg { width: 15px; height: 15px; }
+.gd-launch { padding: 9px 16px; }
+@media (max-width: 640px) { .gd-nav-title, .gd-launch { display: none; } }
+
+.gd-layout { position: relative; z-index: 1; width: min(1180px, calc(100% - 24px)); margin: 0 auto; padding: 36px 0 90px;
+  display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; align-items: start; }
+@media (max-width: 900px) { .gd-layout { grid-template-columns: 1fr; } .gd-toc { display: none; } }
+
+.gd-toc { position: sticky; top: 96px; }
+.gd-toc p { margin: 0 0 10px; font: 600 0.7rem var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+.gd-toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; border-left: 2px solid var(--line-solid); }
+.gd-toc a { display: block; margin-left: -2px; padding: 6px 12px; border-left: 2px solid transparent; font-size: 0.88rem; color: var(--muted); text-decoration: none; }
+.gd-toc a:hover { color: var(--ink); }
+.gd-toc a.is-active { color: var(--primary); border-left-color: var(--primary); font-weight: 600; }
+
+.gd-main { max-width: 760px; }
+.gd-hero { margin-bottom: 18px; }
+.gd-kicker { margin: 0 0 8px; font: 600 0.75rem var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); }
+.gd-hero h1 { margin: 0; font-size: clamp(2rem, 4vw, 2.8rem); letter-spacing: -0.035em; line-height: 1.08; }
+.gd-hero p { margin: 10px 0 0; font-size: 1.05rem; color: var(--muted); }
+
+.gd-section { padding: 26px 28px; margin-top: 18px; border-radius: 20px; scroll-margin-top: 96px;
+  background: var(--glass); border: 1px solid var(--glass-border); box-shadow: var(--shadow); backdrop-filter: blur(12px); }
+.gd-section h2 { margin: 0 0 10px; font-size: 1.45rem; letter-spacing: -0.02em; }
+.gd-section h3 { margin: 22px 0 8px; font-size: 1.02rem; }
+.gd-section p { margin: 8px 0; line-height: 1.65; color: var(--ink-2); }
+.gd-section code { padding: 1px 6px; border-radius: 6px; font: 500 0.82rem var(--mono); background: #f1f3fa; color: var(--ink-2); }
+
+.gd-steps { margin: 12px 0; padding-left: 22px; display: grid; gap: 8px; line-height: 1.6; color: var(--ink-2); }
+.gd-steps li::marker { color: var(--primary); font-weight: 700; }
+
+.gd-terms { margin: 12px 0; display: grid; gap: 0; border-top: 1px solid var(--line-solid); }
+.gd-term { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line-solid); }
+.gd-term dt { font-weight: 700; font-size: 0.92rem; color: var(--ink); }
+.gd-term dd { margin: 0; font-size: 0.92rem; line-height: 1.6; color: var(--ink-2); }
+@media (max-width: 640px) { .gd-term { grid-template-columns: 1fr; gap: 4px; } }
+
+.gd-tip { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--primary-soft); font-size: 0.9rem; }
+.gd-tip svg { flex: none; width: 18px; height: 18px; margin-top: 2px; color: var(--primary); }
+
+.gd-notes { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 10px; line-height: 1.6; color: var(--ink-2); }
+.gd-cta { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 22px; padding: 18px 20px;
+  border-radius: 16px; background: linear-gradient(120deg, #eef0ff, #e8f0ff); }
+.gd-cta h3 { margin: 0; }
+
+/* the wz-btn styles live in Wizard.css; give the guide its own copy so it works standalone */
+.gd .wz-btn { display: inline-flex; align-items: center; gap: 8px; border: 0; cursor: pointer; font: 600 0.92rem var(--sans);
+  padding: 11px 20px; border-radius: 999px; color: #fff;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-2) 60%, #7c83ff 100%);
+  box-shadow: 0 10px 24px -10px rgba(79, 70, 229, 0.7); }
+.gd .wz-btn svg { width: 16px; height: 16px; }
