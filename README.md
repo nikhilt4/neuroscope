@@ -54,7 +54,6 @@ compressing starts with comparing them fairly.
 
 <p align="center">
   <img src="docs/images/results.jpg" width="49%" alt="Results for BCI Competition IV 2a subject 3: decoder bars, a 4-class confusion matrix, scalp maps and power spectra">
-  <img src="docs/images/multi-subject.jpg" width="49%" alt="Within-subject results across all 9 subjects of BCI Competition IV 2a">
 </p>
 
 ![Sleep-EDF playback: two EEG channels scrolling with sleep-stage markers](docs/images/playback.jpg)
