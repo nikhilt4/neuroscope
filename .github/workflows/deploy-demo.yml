@@ -1,0 +1,60 @@
+# Builds the static online demo (frontend, `npm run build:demo`) and publishes it to GitHub Pages.
+#
+# Adapted from Vite's GitHub Pages example (https://vite.dev/guide/static-deploy, read 14 Nov 2026;
+# Vite docs v8.3.7), with the action versions pinned to the same commits as that example.
+# Changes from the example: commands run in frontend/, the build is build:demo, and the upload
+# is dist-demo/. The demo build uses `--base ./` (package.json), so it works under
+# https://<user>.github.io/neuroscope/ or a custom domain without editing vite.config.js.
+#
+# One-time setup: repo Settings → Pages → Build and deployment → Source → "GitHub Actions".
+# Permissions and the github-pages environment are as required by
+# https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages
+name: Deploy demo to GitHub Pages
+
+on:
+  push:
+    branches: ['main']
+    # only the frontend (which includes the recorded demo data) changes the demo
+    paths: ['frontend/**', '.github/workflows/deploy-demo.yml']
+  workflow_dispatch:      # "Run workflow" button on the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: lts/*
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build demo
+        run: npm run build:demo
+      - name: Setup Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: './frontend/dist-demo'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
