@@ -1,0 +1,46 @@
+/* Playback view. Uses the .wz tokens. */
+
+.pb { display: grid; gap: 16px; }
+.pb-head h2 { margin: 10px 0 0; font-size: 1.5rem; letter-spacing: -0.02em; }
+.pb-head p { margin: 4px 0 0; font: 500 0.8rem var(--mono); color: var(--muted); }
+
+.pb-screen { position: relative; padding: 14px 14px 10px; border-radius: 20px; background: #fff; border: 1px solid var(--line-solid); box-shadow: var(--shadow-lg); }
+.pb-canvas { display: block; width: 100%; }
+.pb-big-play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: grid; place-items: center; width: 76px; height: 76px; border-radius: 50%; border: 0; cursor: pointer;
+  color: #fff; background: linear-gradient(135deg, var(--primary), var(--blue)); box-shadow: 0 18px 40px -12px rgba(79,70,229,.7);
+}
+.pb-big-play svg { width: 34px; height: 34px; margin-left: 4px; }
+.pb-big-play:hover { transform: translate(-50%, -50%) scale(1.05); }
+
+.pb-controls {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 10px 14px; border-radius: 16px;
+  background: var(--glass); border: 1px solid var(--glass-border); box-shadow: var(--shadow);
+}
+.pb-play { min-width: 104px; }
+.pb-time { font: 600 0.84rem var(--mono); color: var(--ink-2); min-width: 104px; }
+.pb-timeline { position: relative; flex: 1; min-width: 200px; }
+.pb-timeline input[type="range"] { width: 100%; accent-color: var(--primary); position: relative; z-index: 1; }
+.pb-ticks { position: absolute; left: 0; right: 0; top: -6px; height: 6px; }
+.pb-ticks i { position: absolute; top: 0; width: 2px; height: 6px; border-radius: 1px; opacity: 0.7; }
+.pb-seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 10px; background: #f4f5fb; }
+.pb-seg button { border: 0; background: none; cursor: pointer; padding: 5px 10px; border-radius: 8px; font: 600 0.78rem var(--mono); color: var(--muted); }
+.pb-seg button.is-active { background: #fff; color: var(--primary); box-shadow: 0 1px 3px rgba(30,41,99,.12); }
+.pb-seg span { font: 600 0.76rem var(--mono); color: var(--ink-2); padding: 0 6px; min-width: 56px; text-align: center; }
+
+.pb-panels { display: grid; grid-template-columns: 1fr 1.3fr; gap: 14px; }
+@media (max-width: 900px) { .pb-panels { grid-template-columns: 1fr; } }
+.pb-card { padding: 16px 18px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-border); box-shadow: var(--shadow); }
+.pb-card h4 { margin: 0 0 12px; font-size: 0.95rem; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.pb-card h4 span { font: 500 0.74rem var(--mono); color: var(--muted); }
+.pb-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.pb-legend li { display: inline-flex; align-items: center; gap: 7px; font-size: 0.86rem; font-weight: 500; }
+.pb-legend i { width: 10px; height: 10px; border-radius: 3px; }
+.pb-legend small { font: 500 0.72rem var(--mono); color: var(--faint); }
+.pb-recent { list-style: none; margin: 14px 0 0; padding: 10px 0 0; border-top: 1px solid var(--line); display: grid; gap: 5px; }
+.pb-recent li { display: flex; gap: 12px; font-size: 0.84rem; }
+.pb-recent span { font: 500 0.78rem var(--mono); color: var(--muted); min-width: 52px; }
+.pb-chips { display: flex; flex-wrap: wrap; gap: 5px; max-height: 150px; overflow-y: auto; }
+.pb-chips button { padding: 4px 9px; border-radius: 8px; cursor: pointer; font: 600 0.76rem var(--mono); color: var(--muted); background: #fff; border: 1px solid var(--line-solid); }
+.pb-chips button.is-on { color: #fff; background: var(--primary); border-color: var(--primary); }

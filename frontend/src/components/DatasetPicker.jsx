@@ -39,7 +39,7 @@ function DatasetPicker({ onReady }) {
   const [runVariant, setRunVariant] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
+  const [job, setJob] = useState(null);          // { job_id, stage, elapsed_s } while fetching
   const [error, setError] = useState(null);
   const [bidsData, setBidsData] = useState(null);
 
@@ -53,15 +53,6 @@ function DatasetPicker({ onReady }) {
       .catch((err) => setError(err.message))
       .finally(() => setIsLoading(false));
   }, [source]);
-
-  // the fetch is one synchronous request with no progress events, so show
-  // elapsed time: it's the only honest signal that something is happening
-  useEffect(() => {
-    if (!isFetching) return undefined;
-    setElapsed(0);
-    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => clearInterval(id);
-  }, [isFetching]);
 
   const chooseDataset = (ds) => {
     setSelected(ds);
@@ -79,24 +70,31 @@ function DatasetPicker({ onReady }) {
   const handleFetch = async () => {
     setIsFetching(true);
     setError(null);
+    setJob(null);
     try {
       const payload = { source, dataset_name: selected.id, subjects: [clampSubject(subject)] };
       if (selected.runs && runVariant) payload.runs = selected.runs[runVariant];
-      const data = await api.fetchDataset(payload);
+      // background job: live stage + cancel, and a stalled download times out
+      // server-side instead of freezing the backend
+      const data = await api.runJob(api.startFetchJob(payload), setJob);
       // the backend response doesn't echo the subject; keep it for the summary panel
       const withContext = {
         ...data, subjects: payload.subjects, runs: payload.runs,
         display_name: selected.name || selected.id,   // "BCI Competition IV 2a", not "BNCI2014_001"
         task: selected.task,                           // "erp", "motor_imagery"… — used for decoder suitability notes
+        n_subjects_total: selected.n_subjects,         // enables multi-subject evaluation in Step 4
       };
       if (data.needs_bids_selection) { setBidsData(withContext); return; }
       onReady(withContext);
     } catch (err) {
-      setError(err.message);
+      if (!err.cancelled) setError(err.message);
     } finally {
       setIsFetching(false);
+      setJob(null);
     }
   };
+
+  const cancelFetch = () => job?.job_id && api.cancelJob(job.job_id).catch(() => {});
 
   const notes = selected ? DATASET_NOTES[selected.id] || {} : {};
 
@@ -196,12 +194,17 @@ function DatasetPicker({ onReady }) {
           <div className="up-actions">
             <button className="wz-btn" onClick={handleFetch} disabled={isFetching}>
               {isFetching
-                ? <><span className="wz-spinner" />Fetching… {elapsed}s</>
+                ? <><span className="wz-spinner" />Fetching… {Math.round(job?.elapsed_s ?? 0)}s</>
                 : <>Fetch subject {clampSubject(subject)}<Icon name="arrowRight" /></>}
             </button>
+            {isFetching && (
+              <button className="wz-btn wz-btn-ghost" onClick={cancelFetch} disabled={!job?.job_id}>
+                <Icon name="x" />Cancel
+              </button>
+            )}
             <span className="up-hint">
               {isFetching
-                ? `Downloading ${notes.size || "the dataset"} on the first fetch. After that it's cached and loads in seconds.`
+                ? <><b>{job?.stage || "Starting…"}</b>. The first fetch downloads {notes.size || "the dataset"}; after that it&apos;s cached. Stops automatically after 10 minutes.</>
                 : `First fetch downloads ${notes.size || "the data"}; repeats come from the local cache.`}
             </span>
           </div>

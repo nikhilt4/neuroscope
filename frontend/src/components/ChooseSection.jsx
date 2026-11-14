@@ -16,9 +16,13 @@ const MODES = [
     name: "Motor imagery",
     method: "CSP spatial filtering",
     line: "Finds where on the scalp your classes differ.",
-    locked: (d) => !d.motor_channels?.motor_imagery_possible
-      ? "Needs both C3 and C4"
-      : !d.events_found && !d.is_epochs ? "Needs event markers" : null,
+    // mirrors detector.get_available_modes: CSP needs events + 2 EEG channels, not C3/C4 by name
+    locked: (d) => !d.events_found && !d.is_epochs
+      ? "Needs event markers"
+      : (d.n_eeg_channels ?? d.n_channels) < 2 ? "Needs at least 2 EEG channels" : null,
+    note: (d) => !d.motor_channels?.motor_imagery_possible
+      ? "C3/C4 not found by name. CSP still works; it just can't confirm motor cortex coverage."
+      : null,
   },
   {
     id: "spectral",
@@ -27,6 +31,14 @@ const MODES = [
     method: "Band power",
     line: "Strength of each brain rhythm, per channel.",
     locked: () => "Needs at least one EEG channel",
+  },
+  {
+    id: "erp",
+    icon: "bolt",
+    name: "ERP",
+    method: "Time-domain amplitudes",
+    line: "The voltage waveform after each event: P300, N400, ERN.",
+    locked: (d) => !d.events_found && !d.is_epochs ? "Needs event markers" : "Needs at least one EEG channel",
   },
   {
     id: "basic",
@@ -70,6 +82,7 @@ function ChooseSection({ data, onModeSelected, selectedMode }) {
               <span className="ch-method">{m.method}</span>
               <p className="ch-line">{m.line}</p>
               {reason && <p className="ch-reason">{reason}</p>}
+              {ok && m.note?.(data) && <p className="ch-line" style={{ fontSize: "0.78rem" }}>{m.note(data)}</p>}
             </button>
           );
         })}

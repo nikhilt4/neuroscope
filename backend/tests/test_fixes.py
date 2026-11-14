@@ -299,3 +299,96 @@ def test_detector_reports_eeg_channel_count():
     info = mne.create_info(["Fpz-Cz", "Pz-Oz", "EOG", "Temp"], 100.0, ["eeg", "eeg", "eog", "temperature"])
     caps = detect_capabilities(mne.io.RawArray(np.zeros((4, 1000)), info))
     assert caps["n_channels"] == 4 and caps["n_eeg_channels"] == 2
+
+
+# ── group 1 quick fixes (13 Nov) ───────────────────────────────────────────────
+
+def test_basic_features_are_in_microvolts_so_trees_can_split(synthetic_epochs):
+    """Variance in volts (~1e-10 V^2) sat below sklearn's 1e-7 tree split threshold."""
+    from backend.core.features import extract_basic_features
+    X, extras = extract_basic_features(synthetic_epochs)
+    var_idx = [i for i, n in enumerate(extras["feature_names"]) if n.endswith("_var")]
+    assert (X[:, var_idx].max(0) - X[:, var_idx].min(0)).min() > 1e-7
+
+
+def test_ssvep_markers_become_frequencies():
+    from backend.core.presets import analysis_class_names
+    assert analysis_class_names("ssvep", "spectral", ["Stimulus/S155", "Stimulus/S255"]) == ["15hz", "12hz"]
+
+
+def test_kiloword_median_split_into_two_classes(info):
+    import pandas as pd
+    from backend.fetchers.mne_fetcher import label_kiloword_by_concreteness
+    n = 10
+    md = pd.DataFrame({"WORD": [f"w{i}" for i in range(n)], "Concreteness": np.linspace(1.5, 7.0, n)})
+    ev = np.column_stack([np.arange(n) * 100, np.zeros(n, int), np.arange(1, n + 1)])   # one event per word
+    epochs = mne.EpochsArray(np.zeros((n, len(info.ch_names), 50)), info, events=ev,
+                             event_id={f"w{i}": i + 1 for i in range(n)}, metadata=md)
+    out = label_kiloword_by_concreteness(epochs)
+    assert out.event_id == {"abstract": 1, "concrete": 2}
+    assert (out.events[:, 2] == 1).sum() == 5 and (out.events[:, 2] == 2).sum() == 5
+
+
+@pytest.mark.parametrize("task, available, default, expected", [
+    ("motor_imagery", ["basic", "spectral", "motor_imagery"], "spectral", "motor_imagery"),   # BNCI2014_002
+    ("ssvep", ["basic", "spectral", "motor_imagery"], "motor_imagery", "spectral"),          # SSVEP has C3/C4
+    ("spectral", ["basic", "spectral"], "spectral", "spectral"),
+    ("erp", ["basic", "spectral", "motor_imagery"], "motor_imagery", "motor_imagery"),      # no ERP mode yet
+    ("motor_imagery", ["basic"], "basic", "basic"),                                          # unavailable -> keep
+    (None, ["basic", "spectral"], "spectral", "spectral"),                                   # uploads
+])
+def test_recommend_for_task(task, available, default, expected):
+    from backend.core.detector import recommend_for_task
+    assert recommend_for_task(task, available, default) == expected
+
+
+# ── ERP mode + balanced accuracy (session 2) ───────────────────────────────────
+
+def test_erp_features_are_time_bins_in_microvolts(synthetic_epochs):
+    from backend.core.features import extract_erp_features
+    X, extras = extract_erp_features(synthetic_epochs, bin_ms=50)
+    sfreq = synthetic_epochs.info["sfreq"]                      # 128 Hz, 1-s epochs
+    per_bin = round(sfreq * 0.05)                                # 6 samples
+    n_bins = len(synthetic_epochs.times) // per_bin
+    assert extras["n_bins"] == n_bins
+    assert X.shape == (len(synthetic_epochs), len(synthetic_epochs.ch_names) * n_bins)
+    # first feature = mean of the first bin of the first channel, in µV
+    expected = synthetic_epochs.get_data()[0, 0, :per_bin].mean() * 1e6
+    assert X[0, 0] == pytest.approx(expected)
+    assert extras["feature_names"][0].startswith("C3_")
+
+
+def test_erp_mode_available_and_recommended_only_for_erp_tasks():
+    from backend.core.detector import get_available_modes, get_recommended_mode, recommend_for_task
+    modes = get_available_modes(["C3", "C4", "Cz", "Pz"], True, True, n_eeg_channels=4)
+    assert "erp" in modes
+    assert get_recommended_mode(modes, True) == "motor_imagery", "never the automatic default"
+    assert recommend_for_task("erp", modes, "motor_imagery") == "erp"
+    assert "erp" not in get_available_modes(["C3"], False, False, n_eeg_channels=1), "needs events"
+
+
+def test_flankers_responses_become_correct_or_error():
+    from backend.fetchers.mne_fetcher import label_flankers_responses
+    a = mne.Annotations(
+        onset=[1.0, 1.4, 5.0, 5.3, 9.0, 9.2, 20.0, 30.0],
+        duration=[0] * 8,
+        description=["stimulus/compatible/target_left", "response/left",      # correct
+                     "stimulus/incompatible/target_right", "response/left",   # error
+                     "stimulus/compatible/target_right", "response/right",    # correct
+                     "response/left",                                         # 11 s after a stimulus: dropped
+                     "stimulus/compatible/target_left"],
+    )
+    out = label_flankers_responses(a)
+    assert list(out.description) == ["correct", "error", "correct"]
+    assert list(out.onset) == [1.4, 5.3, 9.2]
+
+
+def test_balanced_accuracy_exposes_majority_guessing():
+    """A 90/10 split where the model can't separate the classes: plain accuracy looks fine."""
+    from backend.core.classifiers import run_classifier
+    rng = np.random.default_rng(7)
+    y = np.array([1] * 90 + [2] * 10)
+    X = rng.standard_normal((100, 5))                            # no signal at all
+    r = run_classifier("lda", "basic", {}, X=X, y=y, cv_folds=5)
+    assert r["accuracy_mean"] > 0.8
+    assert r["balanced_accuracy_mean"] < 0.6

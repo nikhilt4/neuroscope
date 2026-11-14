@@ -82,6 +82,12 @@ DATASET_PRESETS = {
         "bandpass_high": None,
         "notch_enabled": True,
         "notch_freq": 50.0,
+        # Marker codes -> flicker frequencies, exactly as MNE's SSVEP tutorial renames them:
+        # raw.annotations.rename({"Stimulus/S255": "12hz", "Stimulus/S155": "15hz"})
+        # https://mne.tools/stable/auto_tutorials/time-freq/50_ssvep.html (MNE 1.13 docs)
+        # prepare_epochs derives include_events from this mapping.
+        "annotation_rename": {"Stimulus/S255": "12hz", "Stimulus/S155": "15hz"},
+        # tutorial: tmin, tmax = -1.0, 20.0 — "20 s epochs corresponding to the trials"
         "epoch_tmin": -1.0,
         "epoch_tmax": 20.0,
         "baseline_enabled": False,
@@ -190,6 +196,23 @@ MODE_PRESETS = {
         "notch_freq": 50.0,
         "reference": "average",
         "ica_enabled": False,
+    },
+    # Generic ERP fallback for uploads with no dataset preset. Values follow MNE's ERP CORE
+    # tutorial where it states them (0.1–40 Hz filter: raw.filter(l_freq=0.1, h_freq=40);
+    # https://mne.tools/stable/auto_tutorials/epochs/40_autogenerate_metadata.html, MNE 1.13 docs).
+    # The -0.2…0.8 s stimulus-locked window with a pre-stimulus baseline is common ERP practice
+    # but UNVERIFIED as a single cited standard — adjust per paradigm.
+    "erp": {
+        "bandpass_low": 0.1,
+        "bandpass_high": 40.0,
+        "notch_enabled": False,
+        "epoch_tmin": -0.2,
+        "epoch_tmax": 0.8,
+        "baseline_enabled": True,
+        "baseline": (-0.2, 0.0),
+        "reference": "average",
+        "ica_enabled": False,
+        "_confidence": "window unverified",
     },
 }
 

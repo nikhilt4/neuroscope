@@ -1,4 +1,5 @@
 import mne
+import numpy as np
 from mne.datasets import eegbci, sleep_physionet
 from fastapi import HTTPException
 from pathlib import Path
@@ -68,6 +69,65 @@ SLEEP_STAGE_NAMES = {
     "Sleep stage R": "REM",
 }
 SLEEP_WAKE_MARGIN_S = 30 * 60
+
+
+FLANKER_LOOKBACK_S = 1.5
+
+
+def label_flankers_responses(annotations: mne.Annotations) -> mne.Annotations:
+    """
+    ERP CORE Flankers: turn response markers into 'correct' / 'error' trials.
+
+    The file marks which HAND responded ('response/left'), not whether that was right,
+    and mixing those with the four stimulus markers gave 6 meaningless classes (LDA 0.26
+    vs chance 0.25). The paradigm's signature component, the error-related negativity
+    (ERN), is the difference between error and correct responses.
+
+    Same rule as MNE's tutorial, which builds metadata with row_events = the two response
+    events, keep_last = ["stimulus", "response"] over -1.5…0 s, and marks a response
+    correct when the last stimulus's target side equals the response side
+    (https://mne.tools/stable/auto_tutorials/epochs/40_autogenerate_metadata.html,
+    MNE 1.13 docs). Responses with no stimulus in the preceding 1.5 s are dropped, as the
+    tutorial drops rows whose last_stimulus is missing.
+
+    Heavily imbalanced: the tutorial reports 346 correct vs 54 incorrect responses, so a
+    model that always says "correct" scores ~87% accuracy — read balanced accuracy.
+    """
+    order = np.argsort(annotations.onset)
+    last_side, last_onset = None, None
+    onsets, durations, labels = [], [], []
+    for i in order:
+        desc, onset = str(annotations.description[i]), float(annotations.onset[i])
+        if desc.startswith("stimulus/"):
+            last_side = "left" if desc.endswith("target_left") else "right" if desc.endswith("target_right") else None
+            last_onset = onset
+        elif desc in ("response/left", "response/right"):
+            if last_side is None or onset - last_onset > FLANKER_LOOKBACK_S:
+                continue
+            onsets.append(onset)
+            durations.append(0.0)
+            labels.append("correct" if desc.endswith(last_side) else "error")
+    return mne.Annotations(onsets, durations, labels, orig_time=annotations.orig_time)
+
+
+def label_kiloword_by_concreteness(epochs: mne.BaseEpochs) -> mne.BaseEpochs:
+    """
+    Gives kiloword two real classes: abstract vs concrete words.
+
+    As shipped, every one of the 960 epochs has its own event (one per word), so there
+    is nothing to classify and cross-validation crashed ("n_splits=5 cannot be greater
+    than the number of members in each class"). The epochs' metadata carries word
+    properties, including a 'Concreteness' rating (1.65–6.90, median 4.35).
+
+    EXPLORATORY / UNVERIFIED as a benchmark: the median split is this project's choice,
+    not a task defined by the dataset's authors. Words at the median count as abstract.
+    """
+    if epochs.metadata is None or "Concreteness" not in epochs.metadata:
+        return epochs
+    concrete = (epochs.metadata["Concreteness"].to_numpy() > epochs.metadata["Concreteness"].median())
+    epochs.events[:, 2] = np.where(concrete, 2, 1)
+    epochs.event_id = {"abstract": 1, "concrete": 2}
+    return epochs
 
 
 def load_sleep_recording(psg_path, hyp_path) -> mne.io.BaseRaw:
@@ -161,6 +221,7 @@ def fetch_mne_dataset(dataset_name: str, subjects: list, runs: list = None):
                     detail=f"ERP CORE downloaded but no .fif found in {data_path}."
                 )
             raw = mne.io.read_raw_fif(fif_files[0], preload=True, verbose=False)
+            raw.set_annotations(label_flankers_responses(raw.annotations), emit_warning=False)
             return raw
             
 
@@ -186,7 +247,7 @@ def fetch_mne_dataset(dataset_name: str, subjects: list, runs: list = None):
                 )
 
             epochs = mne.read_epochs(fif_files[0], preload=True, verbose=False)
-            return epochs
+            return label_kiloword_by_concreteness(epochs)
 
         else:
             raise HTTPException(status_code=400, detail=f"Fetcher not implemented for: {dataset_name}")

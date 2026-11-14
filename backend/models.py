@@ -98,8 +98,16 @@ class ClassifierConfig(BaseModel):
     configs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 
 
+EVALUATIONS = ("single", "within_subject", "cross_subject")
+
+
 class AnalysisRequest(BaseModel):
     session_id: str
     mode: str = "motor_imagery"
     preprocessing: Optional[PreprocessingConfig] = None
     classifiers: ClassifierConfig = Field(default_factory=ClassifierConfig)
+    # "single": the session's own subject (default, unchanged behaviour)
+    # "within_subject": train/test per subject, aggregate across `subjects`
+    # "cross_subject": leave-one-subject-out over the pooled `subjects`
+    evaluation: str = "single"
+    subjects: Optional[List[int]] = None

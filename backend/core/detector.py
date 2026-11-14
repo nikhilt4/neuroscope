@@ -32,7 +32,7 @@ def detect_capabilities(obj: mne.io.Raw | mne.Epochs) -> dict:
     available_modes = get_available_modes(ch_names, events_found, motor_info["motor_imagery_possible"],
                                           n_eeg_channels=n_eeg)
 
-    recommended_mode = get_recommended_mode(available_modes)
+    recommended_mode = get_recommended_mode(available_modes, motor_info["motor_imagery_possible"])
 
     return {
     "channels": ch_names,
@@ -123,20 +123,48 @@ def get_available_modes(ch_names: list, has_events: bool, motor_imagery_possible
     if spectral_ok:
         modes.append("spectral")
     
-    if motor_imagery_possible and has_events:
-        modes.append("motor_imagery")
-        
+    # CSP needs events and at least 2 EEG channels — not specific channel NAMES. Requiring
+    # C3+C4 by name locked out BNCI2014_002, a motor imagery dataset whose 15 channels are
+    # labelled EEG1–EEG15. NEUROSCOPE_CONTEXT.md 2.3 planned this: C3+C4 becomes a
+    # recommendation (get_recommended_mode), not a hard requirement.
+    if has_events:
+        enough = n_eeg_channels >= 2 if n_eeg_channels is not None else motor_imagery_possible
+        if enough:
+            modes.append("motor_imagery")
+        # ERP: time-locked voltage features need events and any EEG channel
+        if n_eeg_channels is None or n_eeg_channels >= 1:
+            modes.append("erp")
+
     return modes
 
 
 
-def get_recommended_mode(available_modes) -> str:
+# A public dataset's documented task beats guessing from channel names.
+#   motor_imagery: BNCI2014_002's channels are EEG1–EEG15, so names alone never suggest CSP
+#   ssvep/spectral: SSVEP data happens to include C3/C4, which made CSP the default for a
+#                   flicker-frequency task — band power is what separates 12 Hz from 15 Hz
+#   erp: erp_core/limo/kiloword include C3/C4, which made CSP the default for waveform data
+TASK_MODE = {"motor_imagery": "motor_imagery", "ssvep": "spectral", "spectral": "spectral", "erp": "erp"}
+
+
+def recommend_for_task(task: Optional[str], available_modes: list, default: str) -> str:
+    """The mode a dataset's known task calls for, if available; otherwise the detector's pick."""
+    preferred = TASK_MODE.get(task or "")
+    return preferred if preferred in available_modes else default
+
+
+def get_recommended_mode(available_modes, motor_channels_present: bool = True) -> str:
     """
-    returns highest capability mode available:
-    "motor_imagery" > "spectral" > "basic"
+    Recommends motor_imagery (CSP) only when the motor-cortex sites C3 and C4 are
+    present — otherwise there's no evidence the data is lateralised motor activity,
+    and CSP on, say, two sleep channels is a poor default. Then spectral, then basic.
+    Callers that KNOW the task (a public dataset's metadata) can override this.
     """
-    
-    for mode in ["motor_imagery", "spectral", "basic"]:
+    # erp is last in both: without a known ERP task there's no evidence the data is
+    # time-locked evoked activity, so it's offered but never the automatic default
+    order = (["motor_imagery", "spectral", "basic", "erp"] if motor_channels_present
+             else ["spectral", "basic", "motor_imagery", "erp"])
+    for mode in order:
         if mode in available_modes:
             return mode
     return "basic"

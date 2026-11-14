@@ -115,3 +115,22 @@ def test_sleep_physionet_is_staged_in_30s_windows():
     r = run_classifier("lda", "spectral", {}, X=X, y=y)
     print(f"[sleep_physionet subject {SUBJECT}] lda: {r['accuracy_mean']:.3f} (chance {max(counts.values())/len(y):.3f})")
     assert r["accuracy_mean"] == pytest.approx(0.845, abs=TOLERANCE)
+
+
+def test_erp_core_correct_vs_error_in_erp_mode():
+    """
+    ERP CORE Flankers (MNE's single subject): responses labelled correct/error as in MNE's
+    metadata tutorial; ERP time-bin features + shrinkage LDA (Blankertz et al. 2011).
+    Was 6 mixed classes at chance (0.26). Imbalanced ~87/13, so check BALANCED accuracy.
+    """
+    from backend.core.features import extract_features
+    from backend.core.classifiers import run_classifier
+    from backend.fetchers.mne_fetcher import fetch_mne_dataset
+    raw = fetch_mne_dataset("erp_core", [1])
+    epochs, _ = prepare_epochs(raw, get_preset("erp_core", "erp"))
+    y, names, counts = get_labels(epochs)
+    assert counts == {"correct": 346, "error": 54}
+    X, _ = extract_features(epochs, "erp", labels=y)
+    r = run_classifier("lda", "erp", {"solver": "lsqr", "shrinkage": "auto"}, X=X, y=y)
+    print(f"[erp_core subject 1] lda+shrinkage balanced: {r['balanced_accuracy_mean']:.3f}")
+    assert r["balanced_accuracy_mean"] == pytest.approx(0.782, abs=TOLERANCE)

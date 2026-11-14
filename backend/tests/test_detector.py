@@ -21,7 +21,7 @@ def test_raw_with_annotations(synthetic_raw):
     assert sorted(caps["event_classes"]) == ["left_hand", "right_hand"]
     assert caps["duration_seconds"] == pytest.approx(60.0)
     assert caps["needs_event_setup"] is False
-    assert set(caps["available_modes"]) == {"basic", "spectral", "motor_imagery"}
+    assert set(caps["available_modes"]) == {"basic", "spectral", "motor_imagery", "erp"}
 
 
 def test_epochs_array(synthetic_epochs):
@@ -47,13 +47,25 @@ def test_epochs_read_back_from_fif(tmp_path, synthetic_epochs):
     assert caps["n_epochs"] == 60
 
 
-def test_motor_imagery_needs_both_c3_and_c4(synthetic_raw):
+def test_without_c3_c4_motor_imagery_is_available_but_not_recommended(synthetic_raw):
+    """
+    13 Nov change (NEUROSCOPE_CONTEXT.md 2.3): C3+C4 is a RECOMMENDATION, not a gate.
+    CSP needs events and >= 2 EEG channels; BNCI2014_002 (channels EEG1–EEG15) was
+    locked out of the mode its task needs.
+    """
     raw = synthetic_raw.copy().rename_channels({"C4": "T8"})
     caps = detect_capabilities(raw)
 
     assert caps["motor_channels"]["motor_imagery_possible"] is False
-    assert "motor_imagery" not in caps["available_modes"]
-    assert "spectral" in caps["available_modes"]      # still 5 standard channels
+    assert "motor_imagery" in caps["available_modes"]
+    assert caps["recommended_mode"] == "spectral"
+
+
+def test_motor_imagery_needs_two_eeg_channels_and_events():
+    from backend.core.detector import get_available_modes
+    assert "motor_imagery" not in get_available_modes(["Cz"], True, False, n_eeg_channels=1)
+    assert "motor_imagery" not in get_available_modes(["C3", "C4"], False, True, n_eeg_channels=2)
+    assert "motor_imagery" in get_available_modes(["EEG1", "EEG2"], True, False, n_eeg_channels=2)
 
 
 def test_raw_without_events_needs_event_setup(synthetic_raw):

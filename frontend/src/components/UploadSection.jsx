@@ -15,7 +15,7 @@ const UPLOADERS = { single: (f) => api.uploadSingle(f[0]), multi: api.uploadMult
  * onReady(data) with the backend's UploadResponse. Once data is loaded the
  * step shows what was detected instead of the pickers.
  */
-function UploadSection({ loaded, onReady }) {
+function UploadSection({ loaded, onReady, onPlay }) {
   const [route, setRoute] = useState("public");
   const [changing, setChanging] = useState(false);
   const [files, setFiles] = useState([]);
@@ -49,7 +49,7 @@ function UploadSection({ loaded, onReady }) {
   };
 
   if (loaded && !changing) {
-    return <DetectedCard data={loaded} onChange={() => setChanging(true)} />;
+    return <DetectedCard data={loaded} onChange={() => setChanging(true)} onPlay={onPlay} />;
   }
 
   const selection = classifySelection(files);

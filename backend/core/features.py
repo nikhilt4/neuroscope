@@ -35,6 +35,9 @@ def extract_features(
         elif mode == "basic":
             return extract_basic_features(epochs)
 
+        elif mode == "erp":
+            return extract_erp_features(epochs)
+
         else:
             raise HTTPException(status_code=400, detail=f"Unknown mode for feature extraction: {mode}")
 
@@ -154,7 +157,12 @@ def extract_basic_features(epochs: mne.Epochs) -> Tuple[np.ndarray, dict]:
 
     Features per channel: mean, std, variance, min, max, peak-to-peak.
     """
-    data = epochs.get_data(copy=False)  # [n_epochs, n_channels, n_times]
+    # Microvolts, not volts. MNE stores EEG in volts (SI units), so variance comes out
+    # around 1e-10 V^2 — below sklearn's tree split threshold FEATURE_THRESHOLD = 1e-7
+    # (sklearn/tree/_partitioner.pxd, 1.9.0), which made trees treat every variance
+    # feature as constant (eegbci s1: median variance range 3.9e-10). Same failure
+    # as band power in spectral mode; see NEUROSCOPE_CONTEXT.md section 6.
+    data = epochs.get_data(copy=False) * 1e6  # [n_epochs, n_channels, n_times], µV
 
     means = data.mean(axis=2)
     stds = data.std(axis=2)
@@ -178,3 +186,39 @@ def extract_basic_features(epochs: mne.Epochs) -> Tuple[np.ndarray, dict]:
     }
 
     return features, extras
+
+ERP_BIN_MS = 50.0
+
+
+def extract_erp_features(epochs: mne.Epochs, bin_ms: float = ERP_BIN_MS) -> Tuple[np.ndarray, dict]:
+    """
+    Event-related potential features: the mean voltage in consecutive time bins, per
+    channel, across the epoch.
+
+    An ERP (P300, N400, ERN…) is a time-locked voltage WAVEFORM, so its information sits
+    in the signal's shape over time — which band power and CSP (both power measures)
+    throw away. Averaging within short intervals and classifying the resulting
+    spatio-temporal vector with shrinkage LDA is the standard single-trial approach in
+    Blankertz, Lemm, Treder, Haufe & Müller (2011), "Single-trial analysis and
+    classification of ERP components — a tutorial", NeuroImage 56(2):814–825.
+    The paper picks intervals by inspecting the class difference; EQUAL-WIDTH bins of
+    `bin_ms` (default 50 ms) are this project's generic, data-agnostic version of that.
+
+    Microvolts, not volts, for the same sklearn tree-threshold reason as basic mode.
+    Output: [n_epochs, n_channels * n_bins].
+    """
+    data = epochs.get_data(copy=False) * 1e6                    # µV
+    sfreq = float(epochs.info["sfreq"])
+    per_bin = max(1, int(round(sfreq * bin_ms / 1000.0)))
+    n_bins = data.shape[2] // per_bin
+    trimmed = data[:, :, : n_bins * per_bin]
+    binned = trimmed.reshape(data.shape[0], data.shape[1], n_bins, per_bin).mean(axis=3)
+    features = binned.reshape(data.shape[0], -1)
+
+    starts = epochs.times[: n_bins * per_bin : per_bin]
+    feature_names = [f"{ch}_{t * 1000:+.0f}ms" for ch in epochs.ch_names for t in starts]
+    return features, {
+        "feature_names": feature_names,
+        "n_bins": int(n_bins),
+        "bin_ms": float(per_bin / sfreq * 1000.0),
+    }

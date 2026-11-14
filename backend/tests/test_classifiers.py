@@ -15,6 +15,7 @@ from backend.core.classifiers import run_all_classifiers, run_classifier
 RESULT_KEYS = {
     "classifier", "category", "accuracy_mean", "accuracy_std", "fold_scores",
     "n_folds", "confusion_matrix", "confusion_labels",
+    "balanced_accuracy_mean", "balanced_accuracy_std",
 }
 
 

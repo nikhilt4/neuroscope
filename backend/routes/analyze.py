@@ -1,3 +1,5 @@
+from typing import Callable, Optional
+
 import mne
 from fastapi import APIRouter, HTTPException
 
@@ -46,6 +48,17 @@ def describe_preprocessing(data, config: dict, epochs: mne.BaseEpochs, source: s
 
 @router.post("")
 async def analyze(request: AnalysisRequest):
+    """Synchronous analysis. The UI uses POST /jobs/analyze (same work, in a killable process)."""
+    return run_analysis(request)
+
+
+def run_analysis(request: AnalysisRequest, progress: Optional[Callable[[str], None]] = None) -> dict:
+    """
+    The whole analysis, callable from the route or from a background job.
+    `progress` receives short human-readable stage messages for the job's status.
+    """
+    say = progress or (lambda _msg: None)
+    say("Loading data")
     session = get_session(request.session_id)
 
     # Explicit `is False`: sessions written before is_ready existed have no key
@@ -64,6 +77,16 @@ async def analyze(request: AnalysisRequest):
             detail=f"Mode '{request.mode}' unavailable for this dataset. Available: {available}"
         )
 
+    if "eegnet" in request.classifiers.selected:
+        eeg = request.classifiers.configs.setdefault("eegnet", {})
+        eeg["epochs"] = min(eeg.get("epochs", MAX_EEGNET_EPOCHS), MAX_EEGNET_EPOCHS)
+
+    if request.evaluation != "single":
+        # several subjects: same pipeline per subject, different folds (section 8)
+        from backend.core.multisubject import run_cross_subject, run_within_subject
+        runner = run_cross_subject if request.evaluation == "cross_subject" else run_within_subject
+        return runner(request, session, say)
+
     data = reload_data(session)
 
     # preset supplies defaults; user overrides win
@@ -71,6 +94,7 @@ async def analyze(request: AnalysisRequest):
     overrides = request.preprocessing.model_dump(exclude_unset=True) if request.preprocessing else {}
     config = {**preset, **overrides}
 
+    say("Preprocessing")
     epochs, config = prepare_epochs(data, config, runs=session.get("runs"))
     y, class_names, class_counts = get_labels(epochs)
 
@@ -83,21 +107,19 @@ async def analyze(request: AnalysisRequest):
     # motor_imagery keeps CSP inside the CV pipeline, so no features here
     X, extras = (None, {})
     if request.mode != "motor_imagery":
+        say("Extracting features")
         X, extras = extract_features(epochs, request.mode, labels=y)
 
     # Every mode gets the PSD + topomaps; spectral mode reuses the PSD it
     # already computed for its features instead of computing it twice.
+    say("Computing spectra and scalp maps")
     psd_data, topomaps = spectral_summary(
         epochs, y, class_names, FREQUENCY_BANDS,
         psds=extras.get("raw_psds"), freqs=extras.get("freqs"),
     )
 
     clf = request.classifiers
-    configs = dict(clf.configs)
-
-    if "eegnet" in clf.selected:
-        eeg = configs.setdefault("eegnet", {})
-        eeg["epochs"] = min(eeg.get("epochs", MAX_EEGNET_EPOCHS), MAX_EEGNET_EPOCHS)
+    configs = dict(clf.configs)   # EEGNet cap already applied above
 
     results = run_all_classifiers(
         selected_classifiers=clf.selected,
@@ -108,6 +130,7 @@ async def analyze(request: AnalysisRequest):
         epochs_obj=epochs,
         csp_config={"n_components": clf.csp_components, "reg": clf.csp_reg},
         cv_folds=clf.n_folds,
+        progress=say,
     )
 
     successful = [r for r in results if r.get("accuracy_mean") is not None]
@@ -116,6 +139,7 @@ async def analyze(request: AnalysisRequest):
     return {
         "session_id": request.session_id,
         "mode": request.mode,
+        "evaluation": "single",
         "dataset_summary": {
             "source": session.get("source"),
             "dataset": session.get("dataset_name") or session.get("file_path"),

@@ -47,7 +47,14 @@ const RECOMMENDED = {
   motor_imagery: ["riemann_ts", "riemann_mdm", "riemann_fgmdm", "lda", "svm"],
   spectral: ["svm", "logreg", "rf", "hgb", "knn", "lda"],
   basic: ["lda", "svm", "rf", "extra_trees"],
+  //   erp — ERP CORE s1 (balanced acc.): lda+shrinkage 0.782, logreg 0.753, xdawn_ts 0.716
+  erp: ["lda", "logreg", "xdawn_ts"],
 };
+
+// ERP features are many correlated time bins; Blankertz et al. 2011 (NeuroImage 56:814)
+// recommend shrinkage LDA for them. "Recommended" applies it in ERP mode (ERP CORE s1:
+// balanced 0.715 -> 0.782). Values must be valid for _build_lda (solver lsqr + shrinkage).
+const RECOMMENDED_CONFIGS = { erp: { lda: { solver: "lsqr", shrinkage: "auto" } } };
 
 /**
  * Does this decoder suit the loaded data? Returns null, { level: "warn", text }, or
@@ -133,10 +140,76 @@ const PARAM_FIELDS = {
   ],
 };
 
+const EVALUATIONS = [
+  { id: "single", name: "Single subject", line: "Train and test on the subject you loaded." },
+  { id: "within_subject", name: "Within-subject, across a group",
+    line: "Each subject gets its own model; report the mean ± spread. How BCI papers report results." },
+  { id: "cross_subject", name: "Cross-subject (leave one out)",
+    line: "Train on everyone else, test on the person left out. Can it work without calibration?" },
+];
+
+/**
+ * Multi-subject evaluation picker (NEUROSCOPE_CONTEXT.md section 8). Only for public
+ * datasets with several subjects; an uploaded file is a single recording.
+ */
+function EvaluationCard({ capabilities, evaluation, setEvaluation }) {
+  const total = capabilities?.n_subjects_total;
+  if (!["mne", "moabb", "braindecode"].includes(capabilities?.source) || !total || total < 2) return null;
+
+  const loaded = capabilities.subjects?.[0] ?? 1;
+  const all = Array.from({ length: total }, (_, i) => i + 1);
+  // a sensible starting group: everyone for small datasets, otherwise the loaded subject + 4 more
+  const starter = total <= 12 ? all : [...new Set([loaded, ...all])].slice(0, 5).sort((a, b) => a - b);
+
+  const choose = (type) => setEvaluation((prev) => ({
+    type,
+    subjects: type === "single" ? [] : (prev.subjects.length >= 2 ? prev.subjects : starter),
+  }));
+  const toggleSubject = (s) => setEvaluation((prev) => ({
+    ...prev,
+    subjects: prev.subjects.includes(s) ? prev.subjects.filter((x) => x !== s) : [...prev.subjects, s].sort((a, b) => a - b),
+  }));
+  const multi = evaluation.type !== "single";
+
+  return (
+    <div className="cl-eval">
+      <h4>Evaluation</h4>
+      <div className="cl-eval-options" role="radiogroup" aria-label="Evaluation">
+        {EVALUATIONS.map((e) => (
+          <button key={e.id} role="radio" aria-checked={evaluation.type === e.id}
+                  className={`cl-eval-opt ${evaluation.type === e.id ? "is-active" : ""}`} onClick={() => choose(e.id)}>
+            <b>{e.name}</b><small>{e.line}</small>
+          </button>
+        ))}
+      </div>
+      {multi && (
+        <div className="cl-eval-subjects">
+          <div className="cl-eval-head">
+            <span>Subjects <b>{evaluation.subjects.length}</b> of {total}</span>
+            <button className="link-btn" onClick={() => setEvaluation((p) => ({ ...p, subjects: all }))}>All</button>
+            <button className="link-btn" onClick={() => setEvaluation((p) => ({ ...p, subjects: starter }))}>Reset</button>
+          </div>
+          <div className="cl-eval-chips">
+            {all.map((s) => (
+              <button key={s} className={`cl-subj ${evaluation.subjects.includes(s) ? "is-on" : ""}`}
+                      onClick={() => toggleSubject(s)} aria-pressed={evaluation.subjects.includes(s)}>{s}</button>
+            ))}
+          </div>
+          {evaluation.subjects.length < 2 && <p className="cl-fit cl-fit-block" style={{ marginLeft: 0 }}>Pick at least two subjects.</p>}
+          <p className="config-hint">
+            Subjects not used before are downloaded first (per-subject size as on the dataset card), so the
+            first run can take a while.{evaluation.type === "cross_subject" && " Cross-subject runs train on several people's trials at once, so they also use more memory."}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Step 4. The analysis itself is started from the wizard footer's "Run analysis".
  */
-function ClassifySection({ capabilities, mode, config, setConfig, epochSeconds }) {
+function ClassifySection({ capabilities, mode, config, setConfig, epochSeconds, evaluation, setEvaluation }) {
   const [expanded, setExpanded] = useState(null);
 
   const ctx = {
@@ -192,9 +265,16 @@ function ClassifySection({ capabilities, mode, config, setConfig, epochSeconds }
 
   return (
     <div>
+      {evaluation && <EvaluationCard capabilities={capabilities} evaluation={evaluation} setEvaluation={setEvaluation} />}
+
       <div className="cl-quick">
         <span className="cl-quick-label">Quick pick</span>
-        <button className="cl-chip" onClick={() => select(recommended)} title={recommended.join(", ")}>
+        <button className="cl-chip" title={recommended.join(", ")}
+                onClick={() => {
+                  select(recommended);
+                  const extra = RECOMMENDED_CONFIGS[mode];
+                  if (extra) setConfig((prev) => ({ ...prev, configs: { ...prev.configs, ...extra } }));
+                }}>
           <Icon name="sparkle" />Recommended for this data
         </button>
         <button className="cl-chip" onClick={() => select(CLASSICAL_IDS)}>All classical</button>

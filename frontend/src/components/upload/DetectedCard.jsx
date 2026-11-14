@@ -18,7 +18,9 @@ function Stat({ icon, tone, label, value }) {
  * The payoff for loading data: what NeuroScope found in it, before any
  * analysis runs. Everything here comes from detect_capabilities on the backend.
  */
-function DetectedCard({ data, onChange }) {
+function DetectedCard({ data, onChange, onPlay }) {
+  // v1 playback: continuous recordings from public datasets (backend/core/playback.py)
+  const canPlay = ["mne", "braindecode"].includes(data.source) && !data.is_epochs;
   const motor = data.motor_channels || {};
   // names the analysis will use, after the preset's renames (eegbci: T1/T2 -> left/right hand)
   const classes = data.analysis_classes ?? data.event_classes ?? [];
@@ -35,7 +37,14 @@ function DetectedCard({ data, onChange }) {
           {data.subjects?.length ? `Subject ${data.subjects.join(", ")} · ` : ""}
           {data.is_epochs ? "Already split into trials by the source" : "Continuous recording"}
         </p>
-        <button className="up-link" onClick={onChange}>Use different data</button>
+        <div className="up-detected-actions">
+          {canPlay && onPlay && (
+            <button className="wz-btn up-play" onClick={onPlay}>
+              <svg viewBox="0 0 24 24" width="15"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>Play recording
+            </button>
+          )}
+          <button className="up-link" onClick={onChange}>Use different data</button>
+        </div>
       </header>
 
       <div className="up-detected-body">

@@ -41,6 +41,8 @@
   animation: wz-spin 0.8s linear infinite;
 }
 
+.wz-spinner-dark { border-color: rgba(79, 70, 229, .25); border-top-color: var(--primary); }
+
 .wz-alert {
   display: flex; align-items: flex-start; gap: 12px; margin: 16px 0; padding: 14px 16px;
   border-radius: 14px; background: #fff1f2; border: 1px solid #fecdd3; color: #9f1239;
@@ -218,3 +220,21 @@
 .cl-fit svg { flex: none; width: 15px; height: 15px; margin-top: 1px; }
 .cl-fit-warn { color: #92400e; }
 .cl-fit-block { color: #9f1239; font-weight: 600; }
+
+/* ── Step 4: evaluation picker (multi-subject) ────────────────────────────── */
+.cl-eval { margin-bottom: 18px; padding: 16px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-border); box-shadow: var(--shadow); }
+.cl-eval h4 { margin: 0 0 10px; font-size: 0.98rem; }
+.cl-eval-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 860px) { .cl-eval-options { grid-template-columns: 1fr; } }
+.cl-eval-opt { display: flex; flex-direction: column; gap: 3px; text-align: left; cursor: pointer; padding: 12px 14px; border-radius: 12px;
+  font: inherit; color: var(--ink); background: #fff; border: 1.5px solid var(--line-solid); transition: border-color .2s, box-shadow .2s; }
+.cl-eval-opt b { font-size: 0.9rem; }
+.cl-eval-opt small { font-size: 0.78rem; line-height: 1.4; color: var(--muted); }
+.cl-eval-opt.is-active { border-color: var(--primary-2); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+.cl-eval-subjects { margin-top: 14px; }
+.cl-eval-head { display: flex; align-items: center; gap: 12px; font-size: 0.86rem; color: var(--muted); margin-bottom: 8px; }
+.cl-eval-head b { color: var(--ink); }
+.cl-eval-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 132px; overflow-y: auto; }
+.cl-subj { min-width: 36px; padding: 5px 8px; border-radius: 9px; cursor: pointer; font: 600 0.78rem var(--mono);
+  color: var(--muted); background: #fff; border: 1px solid var(--line-solid); }
+.cl-subj.is-on { color: #fff; background: var(--primary); border-color: var(--primary); }

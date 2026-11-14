@@ -59,6 +59,51 @@ export function AccuracyBars({ rows, chance, selected, onSelect, best, showSd = 
   );
 }
 
+/**
+ * Decoder × subject accuracy grid for multi-subject runs. Cells are tinted by how far
+ * above chance they are, so a subject everyone fails on (BNCI2014_001 s5) stands out
+ * as a pale column. Rows sorted by mean; the last column is mean ± spread.
+ */
+export function SubjectGrid({ classifiers, subjects, chance, best }) {
+  const tint = (acc) => {
+    const above = Math.max(0, Math.min(1, (acc - chance) / (1 - chance)));
+    return { background: `rgba(52, 199, 123, ${0.1 + above * 0.75})`, color: above > 0.55 ? "#06331c" : undefined };
+  };
+  const rows = classifiers
+    .filter((c) => c.accuracy_mean !== null && c.per_subject)
+    .sort((a, b) => b.accuracy_mean - a.accuracy_mean);
+  return (
+    <div className="rp-cm-scroll">
+      <table className="rp-cm rp-grid-subj">
+        <thead>
+          <tr>
+            <th>Decoder ↓ / Subject →</th>
+            {subjects.map((s) => <th key={s}>S{s}</th>)}
+            <th>Mean ± spread</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((c) => {
+            const bySubject = Object.fromEntries(c.per_subject.map((p) => [p.subject, p.accuracy]));
+            return (
+              <tr key={c.classifier}>
+                <th>{c.classifier}{c.classifier === best && <span className="rp-star"> ★</span>}</th>
+                {subjects.map((s) => (
+                  <td key={s} style={bySubject[s] != null ? tint(bySubject[s]) : {}}
+                      title={bySubject[s] != null ? undefined : c.subject_errors?.[s] || "did not run"}>
+                    {bySubject[s] != null ? `${(bySubject[s] * 100).toFixed(1)}%` : "—"}
+                  </td>
+                ))}
+                <td className="rp-grid-mean">{(c.accuracy_mean * 100).toFixed(1)}% ± {(c.accuracy_std * 100).toFixed(1)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function cellStyle(pct, diagonal) {
   if (diagonal) return { background: `rgba(52, 199, 123, ${0.25 + (pct / 100) * 0.7})`, color: "#06331c", fontWeight: 700 };
   if (pct >= 5) return { background: `rgba(244, 114, 142, ${Math.min(0.45, pct / 40)})` };

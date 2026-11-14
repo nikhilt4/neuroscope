@@ -386,6 +386,19 @@ epochs → labels → LDA). Results after the fixes below:
 | BNCI2014_002 | ⚠️ 0.463 (chance 0.50) | only basic mode offered → channel names not standard; needs a name mapping |
 | kiloword | ❌ crash | 960 classes (one per word) → CV impossible. Needs a real label (e.g. word concreteness from metadata) or removal |
 
+### Group 1 quick fixes (session 2) — subject 1 throughout
+
+| Fix | Result |
+|---|---|
+| Basic features in µV (`extract_basic_features`) | variance was 3.9e-10 V² → below sklearn's 1e-7 tree threshold. eegbci basic: rf 0.689 |
+| SSVEP `annotation_rename` S255→12hz, S155→15hz (MNE SSVEP tutorial, verbatim) | spectral logreg 0.95, lda 0.90 (20 trials, 4/fold — noisy) |
+| kiloword: abstract vs concrete by **median Concreteness** (`label_kiloword_by_concreteness`) | was a crash; now lda 0.53–0.58, logreg ≤0.59 vs chance 0.50. EXPLORATORY — the split is our choice |
+| Motor imagery gate loosened (2.3's plan): needs events + ≥2 EEG ch, not C3/C4 by name; C3/C4 only drive the *recommendation* | BNCI2014_002 (channels EEG1–EEG15): riemann_ts 0.769, lda 0.738 vs chance 0.50 (was basic-only, 0.463) |
+| `recommend_for_task`: a public dataset's metadata task overrides the channel-name guess | BNCI2014_002 → motor imagery; SSVEP → spectral (it has C3/C4). kiloword/erp_core/limo still get CSP — needs ERP mode |
+
+BNCI2014_002 channel POSITIONS remain unknown: MOABB says three Laplacian clusters around
+C3/Cz/C4 but not which EEGn is which (UNVERIFIED — backlog). No topomaps for it.
+
 ### 13 Nov changes (Claude Code session) — all verified on BNCI2014_001 subject 1
 
 - **Test suite:** `backend/tests/`, 35 fast tests (~9 s, synthetic data) +
@@ -445,9 +458,40 @@ the subject — **keep it that way**.
    split threshold (section 6). Likely needs scaling to µV or log for var.
 8. **Multi-subject / cross-subject evaluation** (section 8).
 9. **Background tasks + progress polling** — becomes necessary with multi-subject.
-10. **ERP mode** — downsampled time-domain features + Xdawn, for erp_core/limo/kiloword,
-    which currently have no appropriate feature representation.
-11. **Live simulation (SSE)** — the showpiece.
+10. ~~**ERP mode**~~ ✅ session 2. `features.extract_erp_features`: mean µV in consecutive 50-ms bins
+    per channel (Blankertz et al. 2011, NeuroImage 56:814 — equal bins are our generic version of
+    their hand-picked intervals). Available with events + ≥1 EEG ch; recommended only via the
+    dataset's task (`TASK_MODE["erp"]`). Step 4 "Recommended" in ERP mode = lda (+lsqr/auto
+    shrinkage) / logreg / xdawn_ts. erp_core now labelled **correct vs error** exactly as MNE's
+    metadata tutorial does (`label_flankers_responses`). **Balanced accuracy** added to every result
+    (`balanced_accuracy_mean/std`); the Results page ranks by it when the majority class exceeds
+    1/k + 5 pts. `xdawn_estimator` default scm → oas (pyriemann says it must be regularised; scm
+    crashed on rank-deficient erp_core/limo). Subject 1, balanced accuracy:
+    erp_core lda+shrinkage **0.782**, logreg 0.753, xdawn_ts 0.716, riemann_ts 0.523 (was 0.26 at 6
+    classes); kiloword ~0.60; **limo still at chance (~0.49) in every mode** — see backlog.
+11. **Live simulation** — v1 PLAYBACK built (session 2); Nikhil's scope: replay public datasets
+    first, uploads next, live decoding later.
+    - `backend/core/playback.py` + `routes/playback.py`: `GET /playback/{sid}/info` (channels,
+      duration, events with real names) and `GET /playback/{sid}/stream?start=&speed=&channels=`
+      (Server-Sent Events, 25 frames/s, µV, events emitted as the playhead passes them; paced
+      against the wall clock so it doesn't drift). Pause/seek/speed = reconnect at a new `start`.
+    - Sources: continuous MNE + braindecode recordings (eegbci, Sleep-EDF, SSVEP, ERP CORE,
+      braindecode BNCI2014_001 / Schirrmeister). MOABB route and limo/kiloword are pre-epoched →
+      clear 400 pointing to the braindecode version.
+    - Display filter always 0.5–40 Hz (+ preset notch), NOT the analysis band; zero-phase is fine
+      for display. Live decoding will need causal filtering (`raw.filter(..., phase="minimum")`).
+    - In-memory cache of the 2 most recent prepared recordings: first frame 0.04 s / seek 0.07 s on
+      77-min BCI IV 2a (was several seconds per play/seek). Only a cache — statelessness holds.
+    - UI: "Play recording" on the Data loaded card → `components/playback/PlaybackView.jsx`:
+      canvas traces (10-s window, ≤8 channels, motor first), event markers + legend + recent events,
+      play/pause, 0.5–4× speed, seekable timeline with event ticks, gain.
+    - Tests: `test_playback.py` (every sample once, event ordering/timing, seek, channel defaults,
+      refused sources, display filter + eegbci renames). Measured over HTTP: eegbci 2.55 s of data
+      in 3.0 s wall-clock (connection setup included).
+    - NOT screenshot-verified: headless Chrome can't capture a page with an open stream (virtual
+      time never settles). Check in a real browser.
+    - Next: uploaded files (continuous EDF/BDF/FIF/BIDS), then live decoding on the same stream
+      (train on early trials, classify each trial as its window completes).
 12. **PDF report**, info/manual page, deploy.
 
 ---
@@ -554,8 +598,19 @@ default to `update_path=True` and are safe.
 ## 7. Backlog
 
 ### Blocking deployment
-- [ ] **No timeout or cancellation on dataset fetches** — a stall wedges a worker until
-      SIGKILL. Background task + watchdog needed.
+- [x] ~~No timeout or cancellation on dataset fetches~~ — session 2: `backend/jobs.py` +
+      `routes/jobs.py`. Each fetch/analysis runs in its own **spawned process** (threads can't
+      be killed out of a C-level socket read). State on disk at `/tmp/neuroscope/jobs/<id>/state.json`
+      (stateless, survives restarts, any worker can cancel). Watchdog thread + lazy check on poll
+      enforce timeouts (fetch 600 s, analyze 1800 s; `?timeout_s=` overrides). Cancel kills the
+      process tree via psutil. Stages reported by `run_fetch`/`run_analysis` (`progress` callback),
+      incl. "Training riemann_ts (2 of 5)". Endpoints: `POST /jobs/fetch`, `POST /jobs/analyze`,
+      `GET /jobs/{id}`, `POST /jobs/{id}/cancel`. Old sync routes kept. UI (DatasetPicker, Run
+      analysis) uses `api.runJob` (1 s polling) with live stage + Cancel. Tests: `test_jobs.py`
+      (completion, timeout kills process, cancel, error surfacing, real eegbci fetch→analyze = 0.711).
+      Cost: ~3 s process start-up per job. `pyriemann` and `psutil` added to requirements.txt.
+- [ ] **Job directories are never cleaned up** — `/tmp/neuroscope/jobs/` grows like sessions do;
+      fold into the session-expiry sweep below.
 - [ ] **Session expiry** — `/tmp/neuroscope/` grows forever. Uploaded files are other
       people's data; a sweep deleting sessions older than ~24h is a privacy requirement as
       much as a disk one. `cleanup_session` is only called on failure paths.
@@ -573,6 +628,16 @@ default to `update_path=True` and are safe.
       with log features and its StandardScaler. Default `C`/`gamma` may be badly matched to
       110 features from 576 trials — worth a small grid check before blaming the features.
 - [ ] **Class names for braindecode / limo / kiloword** — unchecked; same symptom possible.
+      (kiloword now labelled abstract/concrete; braindecode fixed.)
+- [ ] **BNCI2014_002 electrode positions** — EEG1–EEG15 order not documented by MOABB. Find it in
+      Steyrl et al. 2016 / BNCI Horizon docs before naming channels. UNVERIFIED until then.
+- [x] ~~kiloword, erp_core, limo are recommended CSP~~ — ERP mode is now recommended for them.
+- [ ] **limo: Face/A vs Face/B is at chance in every mode.** UNVERIFIED hunch: LIMO's manipulated
+      variable is the faces' phase coherence / noise level (MNE's LIMO tutorial models that), not
+      face identity — so A vs B may simply carry no signal. Check the tutorial + epochs.metadata
+      before relabelling. Also slow (128 ch, 1055 epochs: ~5 min for 4 decoders).
+- [ ] erp_core preset has `ica_enabled: True`; MNE's tutorial doesn't use ICA and does use
+      `reject={"eeg": 250e-6}` (we have no reject option). Worth comparing.
 - [x] ~~Classify step should flag decoders that don't suit the data~~ — 13 Nov: `suitability()` in
       `ClassifySection.jsx` (warn: Riemannian with ≤3 EEG ch, xdawn on non-ERP datasets, EEGNet on
       trials > 8 s; block: FgMDM when c(c+1)/2 < n_classes−1). Plus quick picks (Recommended / All
@@ -621,6 +686,11 @@ default to `update_path=True` and are safe.
       `include_events`, `picks` all now applied.
 
 ### Classifiers
+- [ ] **Cross-subject transfer is near chance** (BNCI s1/4/5: ~0.30 vs 0.25). Standard remedy:
+      Riemannian re-centering / alignment of each subject's covariances before pooling (pyriemann
+      has transfer-learning tools — UNVERIFIED which API in 0.12; check docs before building).
+- [ ] **Cross-subject memory**: pooling all 9 BNCI2014_001 subjects is ~0.9 GB float64 before
+      copies. Consider float32 or per-fold loading if larger cohorts are offered.
 - [ ] `MAX_EEGNET_EPOCHS = 50` silently caps whatever the user enters, and loss is often
       still descending at 50. Either raise it or warn when training hasn't converged.
 - [ ] `SVC(probability=True)` is deprecated in sklearn 1.9, removed in 1.11. Nothing calls
@@ -681,7 +751,24 @@ default to `update_path=True` and are safe.
 
 ---
 
-## 8. Multi-subject evaluation (designed, not built)
+## 8. Multi-subject evaluation — BUILT (session 2)
+
+**Status:** `backend/core/multisubject.py` (`run_within_subject`, `run_cross_subject`),
+`AnalysisRequest.evaluation` ("single" | "within_subject" | "cross_subject") + `.subjects`.
+`run_classifier(groups=...)` switches to `LeaveOneGroupOut`; results gain `fold_groups` and
+`per_subject`. Within-subject keeps one subject in memory at a time; cross-subject pools
+(BNCI2014_001: ~0.9 GB float64 for 9 subjects — watch memory). Multi-subject jobs default to a
+3600 s timeout. UI: Evaluation card in Step 4 (public datasets with >1 subject), decoder × subject
+grid on Results (`SubjectGrid`), spread labelled "across subjects". Tests: `test_multisubject.py`
+(incl. CSP fit sizes prove the held-out subject never reaches training).
+
+**Verified, BNCI2014_001 subjects 1/4/5, 5-fold, defaults:**
+- within-subject: riemann_ts 0.677 ± 0.139 (s1 0.833 = single-subject baseline exactly, s4 0.701,
+  s5 0.495 = the "subject 5 ≈ 49.5%" from section 4); lda 0.559 ± 0.147
+- cross-subject (train on 2, test on 1): riemann_ts 0.303 ± 0.037, lda 0.328 ± 0.054 — barely above
+  chance 0.25. Expected without alignment; see backlog (Riemannian re-centering).
+
+### Original design notes
 
 The most valuable next feature, and the one this session's subject-variability confusion
 makes the case for.
@@ -715,6 +802,20 @@ UI becomes classifier × subject with an expandable detail view and a spread cha
 ---
 
 ## 9. Ideas beyond the MVP
+
+- **"Fetch from anywhere" (Nikhil's idea, session 2):** fetch datasets the way repositories offer
+  them via terminal/code (OpenNeuro, Zenodo, PhysioNet…). **Never execute user-supplied commands
+  or code on the server** — once hosted that is remote code execution, same as the pickle warning
+  below. Safe shape: an allowlist of source types, each with a fixed downloader the backend owns;
+  the user supplies only an identifier (OpenNeuro accession `ds00xxxx`, Zenodo record id, URL on an
+  allowed host). Runs as a background job (timeouts/cancel already exist). OpenNeuro must be rebuilt
+  on plain `requests` against its API — never reinstall `openneuro-py` (section 6).
+- **Helsinki neonatal EEG (seizure detection), session 2:** Nikhil ran LOSO on it elsewhere with much
+  higher accuracy than BNCI cross-subject. Different task (seizures transfer across patients far
+  better than motor imagery) and heavily imbalanced — report balanced accuracy / sensitivity /
+  specificity / AUC, not plain accuracy. Labels live in separate per-expert annotation files, not
+  EDF events. Would need a fetcher + "clinical / seizure detection" task. Verify source + format
+  against the official dataset page first (details here are from memory).
 
 - **More braindecode models** — ShallowFBCSPNet (Schirrmeister 2017), Deep4Net,
   SleepStagerChambon2018 (pairs with sleep_physionet), EEGConformer, ATCNet. Generalise

@@ -17,10 +17,15 @@ from backend.loaders.zip_handler import zip_handler
 from backend.fetchers.mne_fetcher import list_mne_datasets, fetch_mne_dataset
 from backend.fetchers.moabb_fetcher import list_moabb_datasets, fetch_moabb_dataset
 from backend.fetchers.openneuro_fetcher import fetch_openneuro_dataset
-from backend.fetchers.braindecode_fetcher import list_braindecode_datasets, fetch_braindecode_dataset
+from backend.fetchers.braindecode_fetcher import list_braindecode_datasets, fetch_braindecode_dataset, BRAINDECODE_DATASETS
+from backend.fetchers.mne_fetcher import MNE_DATASETS
+from backend.fetchers.moabb_fetcher import MOABB_DATASETS
+
+# per-source dataset metadata, for task-aware mode recommendations
+_DATASET_TASKS = {"mne": MNE_DATASETS, "moabb": MOABB_DATASETS, "braindecode": BRAINDECODE_DATASETS}
 
 
-from backend.core.detector import detect_capabilities
+from backend.core.detector import detect_capabilities, recommend_for_task
 from backend.core.presets import get_preset, analysis_class_names
 
 from backend.utils.file_utils import detect_format, save_temp_file, save_temp_files, detect_multi_format, cleanup_session
@@ -507,11 +512,22 @@ async def list_datasets(source: str):
 
 
 @router.post("/dataset/fetch")
-async def fetch_dataset(request: DatasetFetchRequest, background_tasks: BackgroundTasks):
+async def fetch_dataset(request: DatasetFetchRequest):
+    """Synchronous fetch. The UI uses POST /jobs/fetch (same work, in a killable process)."""
+    return run_fetch(request)
+
+
+def run_fetch(request: DatasetFetchRequest, progress=None) -> UploadResponse:
+    """
+    Fetch a public dataset, detect what it supports and register the session.
+    Callable from the route or from a background job; `progress(msg)` gets stage updates.
+    """
+    say = progress or (lambda _msg: None)
     session_id = str(uuid.uuid4())
     effective_runs = request.runs
-    
-    try:       
+    say(f"Downloading or loading {request.dataset_name} (subject {', '.join(map(str, request.subjects))})")
+
+    try:
 
         if request.source == "mne":
             if request.dataset_name == "eegbci" and not effective_runs:
@@ -567,11 +583,18 @@ async def fetch_dataset(request: DatasetFetchRequest, background_tasks: Backgrou
         cleanup_session(session_id)
         raise HTTPException(status_code=500, detail=f"Failed to fetch dataset: {str(e)}")
 
+    say("Detecting channels and events")
     try:
         capabilities = detect_capabilities(raw)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to detect capabilities: {str(e)}")
-    
+
+    # A public dataset's own metadata is better evidence than channel names: BNCI2014_002 is
+    # motor imagery (channels EEG1–EEG15); SSVEP includes C3/C4 but needs band power.
+    task = _DATASET_TASKS.get(request.source, {}).get(request.dataset_name, {}).get("task")
+    capabilities["recommended_mode"] = recommend_for_task(
+        task, capabilities["available_modes"], capabilities["recommended_mode"])
+
     register_session(
         session_id,
         source=request.source,
@@ -584,9 +607,6 @@ async def fetch_dataset(request: DatasetFetchRequest, background_tasks: Backgrou
     return _build_full_response(session_id, request.dataset_name, capabilities, source=request.source,
                                 dataset_name=request.dataset_name, runs=effective_runs)
 
-@router.get("/dataset/fetch/progress/{session_id}")
-async def fetch_progress(session_id: str):
-    pass
 
 
 

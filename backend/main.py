@@ -6,6 +6,8 @@ load_dotenv()
 
 from backend.routes.upload import router as upload_router
 from backend.routes.analyze import router as analyze_router
+from backend.routes.jobs import router as jobs_router
+from backend.routes.playback import router as playback_router
 import mne
 
 mne.set_log_level("WARNING")   # suppresses CSP's per-fold rank/covariance spam
@@ -26,6 +28,8 @@ app.add_middleware(
 
 app.include_router(upload_router)
 app.include_router(analyze_router)
+app.include_router(jobs_router)
+app.include_router(playback_router)
 
 @app.get("/")
 async def root():

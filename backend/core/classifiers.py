@@ -6,8 +6,8 @@ from fastapi import HTTPException
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.svm import SVC
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.model_selection import LeaveOneGroupOut, StratifiedKFold, cross_val_predict
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, confusion_matrix
 from mne.decoding import CSP
 
 from sklearn.linear_model import LogisticRegression
@@ -229,7 +229,11 @@ def _build_xdawn_ts(config: dict) -> Pipeline:
         ("xdawn_cov", pr["XdawnCovariances"](
             nfilter=config.get("nfilter", 4),
             estimator=config.get("cov_estimator", "oas"),
-            xdawn_estimator=config.get("xdawn_estimator", "scm"),
+            # pyriemann 0.12 docstring: xdawn_estimator "should be regularized using 'lwf' or
+            # 'oas'". The unregularised 'scm' crashed on ERP CORE and LIMO ("leading minor ...
+            # is not positive definite"): re-referencing + ICA leave the data rank-deficient.
+            # Not exposed in the UI's PARAM_FIELDS, so no frontend default to keep in sync.
+            xdawn_estimator=config.get("xdawn_estimator", "oas"),
         )),
         ("ts", pr["TangentSpace"](metric=config.get("metric", "riemann"))),
         ("lr", LogisticRegression(
@@ -289,6 +293,7 @@ def run_classifier(
     epochs_obj: Optional[mne.Epochs] = None,
     csp_config: Optional[dict] = None,
     cv_folds: int = 5,
+    groups: Optional[np.ndarray] = None,
 ) -> dict:
     """
     Trains and cross-validates one classifier, returning accuracy metrics.
@@ -304,7 +309,14 @@ def run_classifier(
     """
     try:
         category = _get_category(classifier_name)
-        cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
+        # groups = subject id per trial -> leave-one-subject-out (cross-subject transfer).
+        # StratifiedKFold on pooled subjects would put the same person in train AND test
+        # and report within-subject accuracy while claiming cross-subject (section 8).
+        # https://scikit-learn.org/1.9/modules/generated/sklearn.model_selection.LeaveOneGroupOut.html
+        if groups is not None:
+            cv = LeaveOneGroupOut()
+        else:
+            cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
 
         # ── deep ──────────────────────────────────────────────────────────
         if category == "deep":
@@ -338,7 +350,7 @@ def run_classifier(
                 sfreq=float(epochs_obj.info["sfreq"]),
             )
             y_true = y_fit
-            y_pred = cross_val_predict(estimator, data, y_fit, cv=cv, n_jobs=1)
+            y_pred = cross_val_predict(estimator, data, y_fit, cv=cv, groups=groups, n_jobs=1)
 
         # ── epoch-level pipelines (Riemannian) ────────────────────────────
         elif category == "epoch":
@@ -367,7 +379,7 @@ def run_classifier(
                     )
             y_true = y
             y_pred = cross_val_predict(
-                estimator, data, y, cv=cv, n_jobs=1
+                estimator, data, y, cv=cv, groups=groups, n_jobs=1
             )
 
         # ── feature classifiers ───────────────────────────────────────────
@@ -406,13 +418,17 @@ def run_classifier(
             estimator = Pipeline(steps)
             
             y_true = y
-            y_pred = cross_val_predict(estimator, data, y, cv=cv, n_jobs=1)
+            y_pred = cross_val_predict(estimator, data, y, cv=cv, groups=groups, n_jobs=1)
 
-        fold_scores = [
-            float(accuracy_score(y_true[test_idx], y_pred[test_idx]))
-            for _, test_idx in cv.split(data, y_true)
-        ]
+        splits = list(cv.split(data, y_true, groups))
+        fold_scores = [float(accuracy_score(y_true[test_idx], y_pred[test_idx])) for _, test_idx in splits]
         scores = np.array(fold_scores)
+        # Balanced accuracy = mean recall per class; chance is 1/k however lopsided the
+        # classes are. Plain accuracy rewards always guessing the majority class: on ERP CORE
+        # Flankers (~87% correct responses) a do-nothing model would score ~87%.
+        # https://scikit-learn.org/1.9/modules/generated/sklearn.metrics.balanced_accuracy_score.html
+        bal_scores = np.array([float(balanced_accuracy_score(y_true[test_idx], y_pred[test_idx]))
+                               for _, test_idx in splits])
 
         labels_sorted = sorted(set(y_true.tolist()))
         cm = confusion_matrix(y_true, y_pred, labels=labels_sorted)
@@ -422,10 +438,15 @@ def run_classifier(
             "category": category,
             "accuracy_mean": float(scores.mean()),
             "accuracy_std": float(scores.std()),
+            "balanced_accuracy_mean": float(bal_scores.mean()),
+            "balanced_accuracy_std": float(bal_scores.std()),
             "fold_scores": fold_scores,
-            "n_folds": cv_folds,
+            "n_folds": len(splits),
             "confusion_matrix": cm.tolist(),
             "confusion_labels": [int(l) for l in labels_sorted],
+            # cross-subject: the subject held out in each fold, aligned with fold_scores
+            **({"fold_groups": [int(groups[test_idx][0]) for _, test_idx in splits]}
+               if groups is not None else {}),
         }
 
     except HTTPException:
@@ -448,14 +469,19 @@ def run_all_classifiers(
     epochs_obj: Optional[mne.Epochs] = None,
     csp_config: Optional[dict] = None,
     cv_folds: int = 5,
+    progress=None,
+    groups: Optional[np.ndarray] = None,
 ) -> list:
     """
     Runs each selected classifier and returns a list of results for comparison.
     Continues past individual classifier failures rather than failing the whole batch —
     one bad classifier shouldn't block seeing results from the others.
+    `progress(msg)` (optional) is told which decoder is training, for job status.
     """
     results = []
-    for clf_name in selected_classifiers:
+    for i, clf_name in enumerate(selected_classifiers, start=1):
+        if progress:
+            progress(f"Training {clf_name} ({i} of {len(selected_classifiers)})")
         try:
             clf_config = configs.get(clf_name, {})
             result = run_classifier(
@@ -467,6 +493,7 @@ def run_all_classifiers(
                 epochs_obj=epochs_obj,
                 csp_config=csp_config,
                 cv_folds=cv_folds,
+                groups=groups,
             )
             results.append(result)
         except HTTPException as e:

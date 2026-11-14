@@ -6,6 +6,7 @@ import ClassifySection from "../components/ClassifySection";
 import ResultsSection from "../components/ResultsSection";
 import Stepper from "../components/wizard/Stepper";
 import SummaryPanel from "../components/wizard/SummaryPanel";
+import PlaybackView from "../components/playback/PlaybackView";
 import { Icon, Logo } from "../components/ui/Icons";
 import * as api from "../api";
 import "./Wizard.css";
@@ -42,9 +43,13 @@ function Wizard({ onExit }) {
     csp_reg: null,
     configs: {},
   });
+  // "single" | "within_subject" | "cross_subject", plus the subjects to include
+  const [evaluation, setEvaluation] = useState({ type: "single", subjects: [] });
   const [results, setResults] = useState(null);
   const [resultsKey, setResultsKey] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisJob, setAnalysisJob] = useState(null);   // { job_id, stage, elapsed_s }
+  const [playbackOpen, setPlaybackOpen] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -59,8 +64,8 @@ function Wizard({ onExit }) {
   // Change the mode, a filter or a model and the old results stop being linkable
   // instead of silently sitting there looking current.
   const configKey = useMemo(
-    () => JSON.stringify([readyData?.session_id, selectedMode, preprocessOverrides, classifierConfig]),
-    [readyData?.session_id, selectedMode, preprocessOverrides, classifierConfig]
+    () => JSON.stringify([readyData?.session_id, selectedMode, preprocessOverrides, classifierConfig, evaluation]),
+    [readyData?.session_id, selectedMode, preprocessOverrides, classifierConfig, evaluation]
   );
   const resultsCurrent = !!results && resultsKey === configKey;
 
@@ -80,22 +85,30 @@ function Wizard({ onExit }) {
   const runAnalysis = async () => {
     setIsAnalyzing(true);
     setError(null);
+    setAnalysisJob(null);
     try {
-      const data = await api.analyze({
+      // background job: shows which decoder is training, can be cancelled, and
+      // times out server-side instead of holding the backend hostage
+      const data = await api.runJob(api.startAnalyzeJob({
         session_id: readyData.session_id,
         mode: selectedMode,
         preprocessing: preprocessOverrides,
         classifiers: classifierConfig,
-      });
+        ...(evaluation.type !== "single" && { evaluation: evaluation.type, subjects: evaluation.subjects }),
+      }), setAnalysisJob);
       setResults(data);
       setResultsKey(configKey);
       goTo(4);
     } catch (err) {
-      setError(err.message);
+      if (!err.cancelled) setError(err.message);
     } finally {
       setIsAnalyzing(false);
+      setAnalysisJob(null);
     }
   };
+
+  const cancelAnalysis = () =>
+    analysisJob?.job_id && api.cancelJob(analysisJob.job_id).catch(() => {});
 
   // Length of each trial the decoders will see, for the suitability notes in Step 4
   // (e.g. EEGNet on 30-s sleep windows). Pre-epoched data: total duration / trials.
@@ -123,6 +136,16 @@ function Wizard({ onExit }) {
         <button className="wz-exit" onClick={onExit}><Icon name="x" /><span>Exit</span></button>
       </header>
 
+      {playbackOpen && readyData ? (
+        // playback takes the full width: the traces need the room more than the summary does
+        <div className="wz-layout wz-layout-full">
+          <main className="wz-main">
+            <PlaybackView sessionId={readyData.session_id}
+                          title={readyData.display_name || readyData.dataset_name || "Recording"}
+                          onClose={() => setPlaybackOpen(false)} />
+          </main>
+        </div>
+      ) : (
       <div className="wz-layout">
         <main className="wz-main">
           <div className="wz-head">
@@ -143,11 +166,13 @@ function Wizard({ onExit }) {
             {step === 0 && (
               <UploadSection
                 loaded={readyData}
+                onPlay={() => setPlaybackOpen(true)}
                 onReady={(data) => {
                   setReadyData(data);
                   setSelectedMode(data.recommended_mode ?? null);
                   setResults(null);
                   setPreprocessOverrides({});
+                  setEvaluation({ type: "single", subjects: [] });   // a new dataset has different subjects
                 }}
               />
             )}
@@ -170,6 +195,8 @@ function Wizard({ onExit }) {
                 config={classifierConfig}
                 setConfig={setClassifierConfig}
                 epochSeconds={epochSeconds}
+                evaluation={evaluation}
+                setEvaluation={setEvaluation}
               />
             )}
             {step === 4 && <ResultsSection results={results} datasetLabel={readyData?.display_name} />}
@@ -182,34 +209,45 @@ function Wizard({ onExit }) {
           preset={preset}
           overrides={preprocessOverrides}
           classifiers={step >= 3 || results ? classifierConfig : null}
+          evaluation={evaluation}
         />
       </div>
+      )}
 
+      {!playbackOpen && (
       <footer className="wz-footer">
         <div className="wz-footer-inner">
           <button className="wz-btn wz-btn-ghost" onClick={goBack} disabled={step === 0 || isAnalyzing}>
             <Icon name="arrowLeft" />Back
           </button>
           <span className="wz-footer-step">
-            <b>{meta.name}</b>
-            {step < STEPS.length - 1 && <> · next: {STEPS[step + 1].name}</>}
+            {isAnalyzing ? (
+              <><b>{analysisJob?.stage || "Starting…"}</b> · {Math.round(analysisJob?.elapsed_s ?? 0)}s</>
+            ) : (
+              <><b>{meta.name}</b>{step < STEPS.length - 1 && <> · next: {STEPS[step + 1].name}</>}</>
+            )}
           </span>
           {step < 3 && (
             <button className="wz-btn" onClick={goNext} disabled={!canLeave[step]}>
               Continue<Icon name="arrowRight" />
             </button>
           )}
-          {step === 3 && (
+          {step === 3 && isAnalyzing && (
+            <button className="wz-btn wz-btn-ghost" onClick={cancelAnalysis} disabled={!analysisJob?.job_id}>
+              <span className="wz-spinner wz-spinner-dark" />Cancel
+            </button>
+          )}
+          {step === 3 && !isAnalyzing && (
             <button className="wz-btn" onClick={resultsCurrent ? goNext : runAnalysis}
-                    disabled={isAnalyzing || !classifierConfig.selected.length}>
-              {isAnalyzing
-                ? <><span className="wz-spinner" />Running…</>
-                : resultsCurrent ? <>View results<Icon name="arrowRight" /></> : <>Run analysis<Icon name="bolt" /></>}
+                    disabled={!classifierConfig.selected.length ||
+                              (evaluation.type !== "single" && evaluation.subjects.length < 2)}>
+              {resultsCurrent ? <>View results<Icon name="arrowRight" /></> : <>Run analysis<Icon name="bolt" /></>}
             </button>
           )}
           {step === 4 && <span />}
         </div>
       </footer>
+      )}
     </div>
   );
 }
