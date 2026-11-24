@@ -260,3 +260,23 @@ circle.hm-outline { stroke: #c7d2fe; }
   [data-reveal] { opacity: 1; transform: none; }
 
 }
+
+/* nav buttons: .lp-btn-ghost adds a 1px border, so every .lp-btn carries one (transparent)
+   and the Guide and "Try it free" buttons come out exactly the same size */
+.lp-btn { border: 1px solid transparent; }
+.lp-btn-ghost { border-color: var(--line); }
+
+.lp-trust { position: relative; z-index: 2; margin: 18px 0 0; text-align: center; font: 500 0.84rem var(--mono); letter-spacing: 0.02em; color: var(--muted); }
+
+/* "what brain signals can do" cards */
+.lp-use { display: flex; flex-direction: column; }
+.lp-use p { flex: 1; }
+.lp-use-icon { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 16px; border-radius: 13px; }
+.lp-use-icon svg { width: 22px; height: 22px; }
+.lp-use-blue { color: #1d4ed8; background: #dbeafe; }
+.lp-use-violet { color: #6d28d9; background: #ede9fe; }
+.lp-use-pink { color: #be185d; background: #fce7f3; }
+.lp-use-mode { align-self: flex-start; margin: 16px 0 0; }
+/* the two nav buttons share one width, and labels never wrap (phones squeezed "Try it free" onto two lines) */
+.lp-btn { white-space: nowrap; }
+.lp-nav .lp-btn { min-width: 104px; }

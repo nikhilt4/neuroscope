@@ -703,6 +703,22 @@ default to `update_path=True` and are safe.
       legitimate experiment and would have made the SGD default visible immediately.
 - [ ] Per-trial standardisation inside the CV pipeline for deep models, as a sklearn
       transformer rather than the current fixed `* 1e6`.
+- [ ] **Export trained models — NEXT PHASE** (announced as "the next stage" in the LinkedIn
+      post, 24 Nov). Today the only export is ParamsExport.jsx's "Reproduce this run" (.py with
+      settings + scores); the CV models are thrown away after scoring (classifiers.py,
+      cross_val_predict). Plan agreed 24 Nov:
+      - **Phase 1:** after CV, refit the chosen model on all trials (CV score stays the honest
+        estimate). Per-model .zip download from the results page: the model (sklearn/pyRiemann via
+        joblib or skops, see https://scikit-learn.org/stable/model_persistence.html — check which
+        is installed; EEGNet as PyTorch state_dict + ONNX), a `model_card.json` (channel order,
+        sfreq, epoch window, **units µV vs V**, preprocessing, class order, CV accuracy, library
+        versions) and `predict_example.py`. Without the card the weights are unusable. Add a
+        "load only files you trust" note if pickle-based. Tests: reloaded model predicts
+        identically; card fields match the run; ONNX output matches torch. Single-subject only.
+      - **Phase 2:** plain parameters for BCI builders (CSP filters, LDA weights, threshold) as
+        JSON and a C header for STM32 firmware; parameter count / size / estimated MCU latency
+        per model; cross-subject model export; pre-recorded bundles for the online demo.
+        No competing tool found does the C-header part (14 Nov comparison).
 
 ### Visualization
 - [x] ~~PSD / topomaps only in spectral mode~~ — 13 Nov.

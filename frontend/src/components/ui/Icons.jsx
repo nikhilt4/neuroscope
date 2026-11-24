@@ -28,6 +28,12 @@ const PATHS = {
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   bolt: <path d="M13 3 5 14h6l-1 7 8-11h-6z" />,
   sparkle: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />,
+  // landing page "what brain signals can do" cards
+  hand: <path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11m0-6.5a1.5 1.5 0 0 1 3 0V11m0-5a1.5 1.5 0 0 1 3 0v6m-9 1-1.6-1.6a1.6 1.6 0 0 0-2.3 2.3L8 18c1.2 1.6 2.8 3 5 3h1a6 6 0 0 0 6-6V9.5a1.5 1.5 0 0 0-3 0" />,
+  keyboard: <><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" /></>,
+  eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
+  moon: <path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" />,
+  car: <><path d="M5 16V11l2-5h10l2 5v5M3 16h18v3H3zM5 11h14" /><circle cx="7.5" cy="16" r="1.5" /><circle cx="16.5" cy="16" r="1.5" /></>,
 };
 
 export function Icon({ name, className = "", size }) {

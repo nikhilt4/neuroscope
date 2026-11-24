@@ -51,7 +51,7 @@ function GuidePage({ onBack, onStart, backLabel = "Back" }) {
         <button className="gd-brand" onClick={onBack}><Logo className="gd-logo" />NeuroScope</button>
         <span className="gd-nav-title">Guide</span>
         <button className="gd-back" onClick={onBack}><Icon name="arrowLeft" />{backLabel}</button>
-        <button className="wz-btn gd-launch" onClick={onStart}>Launch app<Icon name="arrowRight" /></button>
+        <button className="wz-btn gd-launch" onClick={onStart}>Try it free<Icon name="arrowRight" /></button>
       </header>
 
       <div className="gd-layout">
@@ -215,7 +215,7 @@ function GuidePage({ onBack, onStart, backLabel = "Back" }) {
             </ul>
             <div className="gd-cta">
               <h3>Ready to try it?</h3>
-              <button className="wz-btn" onClick={onStart}>Launch app<Icon name="arrowRight" /></button>
+              <button className="wz-btn" onClick={onStart}>Try it free<Icon name="arrowRight" /></button>
             </div>
           </section>
         </main>

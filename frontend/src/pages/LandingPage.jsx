@@ -13,15 +13,32 @@ const STEPS = [
   { icon: "upload", title: "Upload", desc: "EDF, BDF, FIF, BIDS or a public dataset" },
   { icon: "detect", title: "Detect", desc: "Channels, montage and events, found for you" },
   { icon: "filter", title: "Preprocess", desc: "Published presets, every value editable" },
-  { icon: "classify", title: "Classify", desc: "14 decoders, leakage-safe CV" },
+  { icon: "classify", title: "Classify", desc: "14 models, leakage-safe CV" },
   { icon: "results", title: "Results", desc: "Compare, visualise and export" },
 ];
 
 const FEATURES = [
-  { icon: "wave", title: "Complete EEG pipeline", desc: "Load to results in one place" },
-  { icon: "shield", title: "Cross-validation that can’t cheat", desc: "Filters refit inside every fold" },
-  { icon: "layers", title: "14 decoders, 3 families", desc: "Classical, Riemannian, deep" },
-  { icon: "browser", title: "Runs in the browser", desc: "No code, no environment" },
+  { icon: "browser", title: "Free, in your browser", desc: "No install, no code" },
+  { icon: "wave", title: "Data to results in minutes", desc: "Load, clean, train, compare" },
+  { icon: "layers", title: "14 models, 3 families", desc: "Classical, Riemannian, deep" },
+  { icon: "shield", title: "Results you can trust", desc: "Cross-validation that can’t cheat" },
+];
+
+// What EEG can actually be used for, and which NeuroScope mode analyses it. Kept to
+// well-established BCI/clinical uses so the claims hold up for people in the field.
+const USES = [
+  { icon: "hand", tone: "blue", mode: "Motor imagery mode", title: "Imagine moving your hand",
+    body: "The 8–13 Hz mu rhythm drops over the opposite side of the motor cortex, even when you don’t move. BCIs use it to steer a cursor, a wheelchair or a game." },
+  { icon: "bolt", tone: "blue", mode: "Motor imagery mode", title: "Clench your fist",
+    body: "Real movements change the same motor rhythms. That’s the basis of controlling a robotic hand, and of brain-driven rehab after a stroke." },
+  { icon: "keyboard", tone: "violet", mode: "ERP mode", title: "Focus on a flashing letter",
+    body: "A P300 wave appears about 300 ms after the letter you’re waiting for. Spellers use it to let people type without moving a muscle." },
+  { icon: "eye", tone: "violet", mode: "Spectral mode", title: "Look at a flickering light",
+    body: "Your visual cortex echoes the flicker’s frequency. Look at one of several lights to pick an option, quickly and with almost no training." },
+  { icon: "moon", tone: "pink", mode: "Spectral mode · playback", title: "Fall asleep",
+    body: "Each sleep stage has its own signature, from alpha as you drift off to slow delta waves in deep sleep. Clinics score whole nights from it." },
+  { icon: "car", tone: "pink", mode: "Spectral mode", title: "Start to nod off at the wheel",
+    body: "Rising theta and alpha power flag drowsiness before it turns dangerous. NeuroScope’s creator built a headband that detects it on the chip." },
 ];
 
 const FAMILIES = [
@@ -98,6 +115,7 @@ function LandingPage({ onStart, onGuide }) {
       <header className="lp-nav">
         <a className="lp-brand" href="#top" onClick={go("top")}><Logo />NeuroScope</a>
         <nav className="lp-nav-links">
+          <a href="#uses" onClick={go("uses")}>Uses</a>
           <a href="#preview" onClick={go("preview")}>Results</a>
           <a href="#models" onClick={go("models")}>Models</a>
           <a href="#why" onClick={go("why")}>Why</a>
@@ -105,7 +123,8 @@ function LandingPage({ onStart, onGuide }) {
         </nav>
         {/* a button, not a nav link: the nav links are hidden on phones, the guide shouldn't be */}
         <button className="lp-btn lp-btn-ghost lp-btn-sm lp-guide-btn" onClick={onGuide}>Guide</button>
-        <button className="lp-btn lp-btn-sm" onClick={onStart}>Launch app</button>
+        {/* "Try it free", not "Launch app": it opens in the browser, nothing installs */}
+        <button className="lp-btn lp-btn-sm" onClick={onStart}>Try it free</button>
       </header>
 
       {/* ── hero ─────────────────────────────────────────────── */}
@@ -114,16 +133,16 @@ function LandingPage({ onStart, onGuide }) {
         <EegTraces className="lp-waves" channels={5} />
 
         <div className="lp-hero-text">
-          <p className="lp-eyebrow"><span className="lp-dot" />EEG analysis &amp; BCI platform{DEMO && <> · online demo</>}</p>
+          <p className="lp-eyebrow"><span className="lp-dot" />Free EEG analysis &amp; BCI platform{DEMO && <> · online demo</>}</p>
           <h1 className="lp-title">NeuroScope</h1>
           <p className="lp-tagline">
-            Every EEG format. Fourteen decoders.<br />
+            Every EEG format. Fourteen models.<br />
             <span className="lp-grad">One fair comparison.</span>
           </p>
           <p className="lp-lede">
-            Upload a recording or pull a public dataset. NeuroScope works out what your data can support,
-            runs a published preprocessing pipeline, and puts classical, Riemannian and deep-learning
-            decoders head to head. All in the browser, with no setup.
+            Turn raw brainwaves into answers. Load a recording or a public dataset, and NeuroScope cleans it,
+            trains 14 machine-learning models and shows you which one reads the brain best, with accuracy,
+            confusion matrices and scalp maps to back it up.
           </p>
         </div>
 
@@ -144,6 +163,7 @@ function LandingPage({ onStart, onGuide }) {
           </button>
           <a className="lp-btn lp-btn-ghost lp-btn-lg" href="#preview" onClick={go("preview")}>See real results</a>
         </div>
+        <p className="lp-trust">Free · No code · No install · Real results, not mock-ups</p>
       </section>
 
       <section className="lp-features">
@@ -153,6 +173,38 @@ function LandingPage({ onStart, onGuide }) {
             <div><b>{f.title}</b><span>{f.desc}</span></div>
           </div>
         ))}
+      </section>
+
+      {/* ── what brain signals can do ────────────────────────── */}
+      <section className="lp-section" id="uses">
+        <div className="lp-head-block" data-reveal>
+          <p className="lp-kicker">What brain signals can do</p>
+          <h2 className="lp-h2">Think it, and a computer can read it.</h2>
+          <p className="lp-sub">
+            Thoughts and actions leave patterns in your EEG. Here’s what researchers and BCI builders already
+            do with them, and the NeuroScope mode that analyses each one.
+          </p>
+        </div>
+        <div className="lp-grid-3">
+          {USES.map((u, i) => (
+            <article className="lp-card lp-use" key={u.title} data-reveal style={{ "--d": `${(i % 3) * 80}ms` }}>
+              <span className={`lp-use-icon lp-use-${u.tone}`}><Svg name={u.icon} /></span>
+              <h3>{u.title}</h3>
+              <p>{u.body}</p>
+              <span className={`lp-tag lp-tag-${u.tone} lp-use-mode`}>{u.mode}</span>
+            </article>
+          ))}
+        </div>
+        <div className="lp-callout" data-reveal>
+          <span className="lp-callout-icon"><Svg name="sparkle" /></span>
+          <p>
+            <b>Why machine learning?</b> EEG is a few microvolts at the scalp, buried under noise from muscles,
+            blinks and mains power, and every brain is different. Hand-tuned thresholds break from one person to
+            the next; machine learning learns each person’s pattern from a few minutes of examples. The catch is
+            that it can quietly fool you, which is why NeuroScope compares models fairly and labels every result
+            with the person it came from.
+          </p>
+        </div>
       </section>
 
       {/* ── results preview ──────────────────────────────────── */}
@@ -259,8 +311,8 @@ function LandingPage({ onStart, onGuide }) {
         <EegTraces className="lp-final-waves" channels={3} color="#ffffff" speed={0.4} />
         <h2>Ready to look inside your data?</h2>
         <p>{DEMO
-          ? "Explore two recorded datasets in the online demo: the full wizard, real results and live playback."
-          : "Start with a public dataset, with nothing to download or install, or upload your own recording."}</p>
+          ? "Explore two recorded datasets in the free online demo: the full wizard, real results and live playback."
+          : "It’s free. Start with a public dataset, with nothing to download or install, or upload your own recording."}</p>
         <button className="lp-btn lp-btn-light lp-btn-lg" onClick={onStart}>Start analysing →</button>
       </section>
 

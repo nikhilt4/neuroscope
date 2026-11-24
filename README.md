@@ -1,10 +1,11 @@
 # NeuroScope
 
-**An EEG analysis and brain–computer interface platform in the browser.** Load a recording or a
-public dataset, and NeuroScope works out what the data can support, runs a preprocessing
-pipeline taken from published methods, and compares 14 classical, Riemannian and deep-learning
-decoders with cross-validation that can't leak test data. Or just watch a recording play back
-as a live, scrolling EEG trace.
+**Free EEG analysis and brain–computer interface platform in the browser. No code, no install.**
+Turn raw brainwaves into answers: load a recording or a public dataset, and NeuroScope works out
+what the data can support, cleans it with a preprocessing pipeline taken from published methods,
+and trains 14 machine-learning models (classical, Riemannian and deep learning) head to head,
+with cross-validation that can't leak test data. Or just watch a recording play back as a live,
+scrolling EEG trace.
 
 ### ▶ [Try the online demo](https://nikhilt4.github.io/neuroscope/)
 
@@ -25,9 +26,28 @@ hardware wasn't what slowed me down. Off the board, I kept losing weeks to the s
 3. **Quick comparisons quietly cheat.** Fit CSP or a scaler on all the data before
    cross-validating, and accuracy goes up for the wrong reason.
 
-NeuroScope is the tool I wished I'd had. It also feeds my MSc research at Imperial College
-London on compressing EEG decoders to run on microcontrollers. Deciding which decoders are worth
-compressing starts with comparing them fairly.
+NeuroScope is the tool I wished I'd had. It started as a fun way to explore EEG data, and turned
+into a way to make building pipelines and training models a lot less painful.
+
+## What brain signals can do
+
+Thoughts and actions leave patterns in EEG. These are well-established uses, and the NeuroScope
+mode that analyses each one:
+
+| You... | What the EEG shows | What it's used for | Mode |
+|---|---|---|---|
+| Imagine moving your hand | The 8–13 Hz mu rhythm drops over the opposite motor cortex | Steering a cursor, wheelchair or game | Motor imagery |
+| Clench your fist | Real movement changes the same motor rhythms | Robotic hands, rehab after a stroke | Motor imagery |
+| Focus on a flashing letter | A P300 wave about 300 ms after the target | Spellers: typing without moving | ERP |
+| Look at a flickering light | The visual cortex echoes the flicker frequency (SSVEP) | Fast menu selection with little training | Spectral |
+| Fall asleep | Each sleep stage has its own signature, alpha to slow delta | Clinical sleep scoring | Spectral, playback |
+| Start to nod off | Rising theta and alpha power | Drowsiness alarms for drivers | Spectral |
+
+**Why machine learning?** EEG is a few microvolts at the scalp, buried under noise from muscles,
+blinks and mains power, and every brain is different. Hand-tuned thresholds break from one person
+to the next; a model learns each person's pattern from a few minutes of examples. The catch is
+that it can quietly fool you, which is why NeuroScope compares models fairly and labels every
+result with the subject it came from.
 
 ## What you can do
 
@@ -150,7 +170,7 @@ React + Vite wizard ── api.js ──► FastAPI
 ## What's next
 
 - **More decoders:** filter-bank CSP, ShallowFBCSPNet / Deep4Net, and compact, embedded-friendly
-  CNNs such as EEG-TCNet, which tie into the microcontroller work.
+  CNNs such as EEG-TCNet that are small enough for microcontrollers, plus **exporting trained models**.
 - **Cross-subject alignment:** re-centering each person's covariance matrices (Zanini et al.
   2018) to close the gap when testing on someone new.
 - **Live decoding** on top of playback: the classifier labels the recording as it scrolls past.
