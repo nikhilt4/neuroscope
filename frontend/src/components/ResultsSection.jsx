@@ -4,6 +4,7 @@ import PSDChart from "./PSDChart";
 import { StatTile, AccuracyBars, ConfusionTable, SubjectGrid } from "./results/ResultParts";
 import { FAMILY, describeConfusion, macroF1, prettyClass } from "./results/metrics";
 import { MODE_LABELS } from "./wizard/SummaryPanel";
+import { prettyLabel } from "../labels";
 
 const BAND_LABEL = { delta: "δ delta", theta: "θ theta", alpha: "α alpha", beta: "β beta", gamma: "γ gamma" };
 
@@ -12,6 +13,51 @@ const BAND_LABEL = { delta: "δ delta", theta: "θ theta", alpha: "α alpha", be
  * (components/landing/ResultsPreview.jsx), which was approved as the design,
  * fed by the live /analyze response instead of fixed numbers.
  */
+// What the classical models see in each mode. Riemannian models and EEGNet read the raw trials in all of them.
+const MODE_FEATURES = {
+  motor_imagery: "CSP spatial filters: patterns of power across the scalp that differ between the classes",
+  spectral: "the power in each frequency band (delta to gamma) on every channel",
+  erp: "the voltage after each event, averaged in 50 ms steps on every channel",
+  basic: "simple statistics of each channel's signal",
+};
+
+/**
+ * Plain-language answer to "what exactly am I classifying?", asked by a neuroscientist
+ * testing the app: the classes, what one trial is, how accuracy is measured, and what
+ * the models look at. Accuracy is per-trial labelling of unseen trials, not a rating
+ * or a before/after comparison, so it says that outright.
+ */
+function TaskExplainer({ summary, mode, evaluation, nFolds, chance, imbalanced }) {
+  const names = summary.classes.map(prettyLabel);
+  const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
+  const secs = summary.epoch_duration ? `${Number(summary.epoch_duration.toFixed(1))}-second` : "";
+  const tested = {
+    within_subject: "Each person's models are trained on part of that person's trials and tested on the rest",
+    cross_subject: "Each model is trained on everyone except one person, then tested on that unseen person",
+  }[evaluation] || `The trials are split into ${nFolds || 5} parts; each model trains on all but one part and is tested on the part it never saw, ${nFolds || 5} times over`;
+  return (
+    <section className="rp-task" aria-label="What is being classified">
+      <h4>What you&apos;re classifying</h4>
+      <p>
+        <b>The task:</b> telling apart <b>{list}</b> from {secs} windows of EEG ({summary.n_epochs} trials,
+        each labelled with what was happening at the time).
+      </p>
+      <p>
+        <b>How it&apos;s scored:</b> {tested}. <b>Accuracy</b> is the share of those unseen trials the model
+        labelled correctly{imbalanced ? " (balanced: averaged across classes, because the classes are uneven)" : ""}.
+        Guessing scores about {(chance * 100).toFixed(0)}%. It&apos;s a hit rate on new data, not a rating or a
+        before/after comparison.
+      </p>
+      {MODE_FEATURES[mode] && (
+        <p>
+          <b>What the models look at:</b> the classical models use {MODE_FEATURES[mode]}. The Riemannian models and
+          EEGNet learn straight from the raw EEG.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function ResultsSection({ results, datasetLabel }) {
   // null = follow the best decoder by the page's own metric (balanced accuracy when the
   // classes are imbalanced), not the backend's plain-accuracy best_classifier
@@ -92,6 +138,11 @@ function ResultsSection({ results, datasetLabel }) {
             </p>
           </div>
         </div>
+
+        {best && (
+          <TaskExplainer summary={summary} mode={results.mode} evaluation={results.evaluation}
+                         nFolds={best.n_folds} chance={imbalanced ? 1 / k : chance} imbalanced={imbalanced} />
+        )}
 
         {best && (
           <div className="rp-stats">

@@ -56,14 +56,15 @@ def test_unknown_channels_are_a_clear_error(synthetic_raw):
     assert exc.value.status_code == 400
 
 
-def test_pre_epoched_and_upload_sessions_are_refused(monkeypatch, synthetic_epochs):
+def test_pre_epoched_and_unsupported_sessions_are_refused(monkeypatch, synthetic_epochs):
+    # uploads ARE supported now (test_viewer.py); epoched data and unknown sources aren't
     monkeypatch.setattr(playback, "reload_data", lambda s: synthetic_epochs)
     with pytest.raises(HTTPException) as exc:
         playback.load_for_playback({"source": "mne", "dataset_name": "limo"})
     assert "already cut into trials" in exc.value.detail
     with pytest.raises(HTTPException) as exc:
-        playback.load_for_playback({"source": "upload"})
-    assert "coming later" in exc.value.detail
+        playback.load_for_playback({"source": "openneuro"})
+    assert "supports uploaded recordings" in exc.value.detail
 
 
 def test_load_applies_display_filter_and_renames(monkeypatch, info):

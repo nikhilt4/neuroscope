@@ -1,4 +1,5 @@
 import { Icon } from "../ui/Icons";
+import { prettyLabel } from "../../labels";
 
 // Familiar task name + the method it runs (NEUROSCOPE_CONTEXT.md 2.3).
 // The internal strings stay as they are — they're stored in presets and sessions.
@@ -71,7 +72,7 @@ function SummaryPanel({ data, mode, preset, overrides, classifiers, evaluation }
           {/* analysis_classes = names after the preset's renames (eegbci T1/T2 -> left/right hand) */}
           <Row label="Classes" value={(() => {
             const cls = data?.analysis_classes ?? data?.event_classes;
-            return cls?.length ? cls.map((c) => String(c).replace(/_/g, " ")).join(" · ") : null;
+            return cls?.length ? cls.map(prettyLabel).join(" · ") : null;
           })()} empty="—" />
         </dl>
       </section>

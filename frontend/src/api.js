@@ -96,27 +96,13 @@ const live_cancelJob = (jobId) => postJSON(`/jobs/${jobId}/cancel`, {});
 // ── Playback ──────────────────────────────────────────────────────────────
 const live_getPlaybackInfo = (sessionId) => request(`/playback/${sessionId}/info`);
 
-/**
- * Opens a real-time replay stream (Server-Sent Events). onMessage receives each
- * parsed frame ({type: "start"|"data"|"event"|"end", ...}). Returns a close()
- * function; pausing, seeking or changing speed = close, then open again.
- */
-function live_openPlayback(sessionId, { start = 0, speed = 1, channels = [], prefill = 0, preview = false },
-                             onMessage, onError) {
-  // prefill: the server first sends the `prefill` seconds before `start`, so a seek shows a
-  // full screen at once; preview: stop after that (scrubbing while paused)
-  const params = new URLSearchParams({ start: String(start), speed: String(speed),
-                                       prefill: String(prefill), preview: String(preview) });
+/** One page for the EEG viewer: every channel from `start` for `duration` s, in µV, with its events. */
+function live_getPlaybackWindow(sessionId, { start = 0, duration = 10, montage = "referential", channels = [] } = {}) {
+  const params = new URLSearchParams({ start: String(start), duration: String(duration), montage });
   if (channels.length) params.set("channels", channels.join(","));
-  const es = new EventSource(`${API_BASE}/playback/${sessionId}/stream?${params}`);
-  es.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    onMessage(msg);
-    if (msg.type === "end") es.close();     // otherwise EventSource auto-reconnects
-  };
-  es.onerror = () => { es.close(); onError?.(new Error("Playback stream disconnected.")); };
-  return () => es.close();
+  return request(`/playback/${sessionId}/window?${params}`);
 }
+
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -149,7 +135,6 @@ export const uploadSingle = DEMO ? demo.uploadSingle : live_uploadSingle;
 export const uploadMulti = DEMO ? demo.uploadMulti : live_uploadMulti;
 export const uploadBids = DEMO ? demo.uploadBids : live_uploadBids;
 export const getPreset = DEMO ? demo.getPreset : live_getPreset;
-export const openPlayback = DEMO ? demo.openPlayback : live_openPlayback;
 export const configureColumns = DEMO ? demo.configureColumns : live_configureColumns;
 export const configureMat = DEMO ? demo.configureMat : live_configureMat;
 export const configureBids = DEMO ? demo.configureBids : live_configureBids;
@@ -161,3 +146,4 @@ export const startAnalyzeJob = DEMO ? demo.startAnalyzeJob : live_startAnalyzeJo
 export const getJob = DEMO ? demo.getJob : live_getJob;
 export const cancelJob = DEMO ? demo.cancelJob : live_cancelJob;
 export const getPlaybackInfo = DEMO ? demo.getPlaybackInfo : live_getPlaybackInfo;
+export const getPlaybackWindow = DEMO ? demo.getPlaybackWindow : live_getPlaybackWindow;

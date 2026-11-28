@@ -136,7 +136,6 @@ export async function startAnalyzeJob({ session_id, mode, classifiers, evaluatio
 }
 
 // ── Playback ────────────────────────────────────────────────────────────────
-const FRAMES_PER_SECOND = 25;   // same frame rate as backend/core/playback.py
 
 async function playbackFor(sessionId) {
   const m = await manifest();
@@ -145,11 +144,27 @@ async function playbackFor(sessionId) {
   return key;
 }
 
+// left / right / midline from a 10-20 name, as backend/core/playback._hemisphere does
+const hemisphere = (name) => {
+  const first = name.split("-")[0].trim();
+  if (/z$/i.test(first)) return "midline";
+  const n = parseInt(first.replace(/\D/g, ""), 10);
+  return Number.isNaN(n) ? "midline" : (n % 2 ? "left" : "right");
+};
+
 export async function getPlaybackInfo(sessionId) {
-  return loadJSON(`playback__${await playbackFor(sessionId)}.json`);
+  const info = await loadJSON(`playback__${await playbackFor(sessionId)}.json`);
+  // the recording was saved before the page viewer existed; add what it needs
+  return {
+    ...info,
+    channel_meta: info.channels.map((name) => ({ name, type: "eeg", group: hemisphere(name) })),
+    montages: ["referential"],
+  };
 }
 
 const binCache = new Map();
+const MIN_VIEW_SFREQ = 100;      // same display floor as the backend's page_window
+const TARGET_POINTS = 2600;
 function loadSamples(key) {
   if (!binCache.has(key)) {
     binCache.set(key, fetch(`${BASE}playback__${key}.bin`)
@@ -159,53 +174,23 @@ function loadSamples(key) {
   return binCache.get(key);
 }
 
-/**
- * Mirrors the server's stream_frames(): a "start" frame, an optional unpaced prefill,
- * then 1/25-s "data" frames paced to the wall clock, "event" frames as the playhead
- * passes them, and "end". Returns close(), like the EventSource version.
- */
-export function openPlayback(sessionId, { start = 0, speed = 1, channels = [], prefill = 0, preview = false },
-                             onMessage, onError) {
-  let closed = false, timer = null;
-  (async () => {
-    const key = await playbackFor(sessionId);
-    const [info, raw] = await Promise.all([loadJSON(`playback__${key}.json`), loadSamples(key)]);
-    if (closed) return;
-    const { sfreq, n_samples: n, scale } = info;
-    const chans = (channels.length ? channels : info.default_channels).filter((c) => info.channels.includes(c));
-    const idx = chans.map((c) => info.channels.indexOf(c));
-    const slice = (a, b) => idx.map((ci) => Array.from(raw.subarray(ci * n + a, ci * n + b), (v) => v / scale));
-    const events = info.events;
-    const perFrame = Math.max(1, Math.round(sfreq / FRAMES_PER_SECOND));
-    const sp = Math.min(Math.max(speed, 0.25), 8);
-    let pos = Math.floor(Math.max(0, Math.min(start, n / sfreq)) * sfreq);
-    let ev = events.findIndex((e) => e.t >= pos / sfreq);
-    if (ev < 0) ev = events.length;
-
-    onMessage({ type: "start", t: pos / sfreq, channels: chans, sfreq, speed: sp });
-    if (prefill > 0) {
-      const pf = Math.max(0, pos - Math.floor(prefill * sfreq));
-      events.filter((e) => pf / sfreq <= e.t && e.t < pos / sfreq).forEach((e) => onMessage({ type: "event", ...e, prefill: true }));
-      if (pos > pf) onMessage({ type: "data", t: pf / sfreq, prefill: true, samples: slice(pf, pos) });
-    }
-    if (preview) { onMessage({ type: "end", t: pos / sfreq, preview: true }); return; }
-
-    const wall0 = performance.now(), pos0 = pos;
-    const tick = () => {
-      if (closed) return;
-      // send every frame that is due by now (wall clock × speed), so timer jitter can't drift
-      const due = Math.min(n, pos0 + Math.floor(((performance.now() - wall0) / 1000) * sp * sfreq));
-      while (pos < due) {
-        const end = Math.min(n, pos + perFrame);
-        while (ev < events.length && events[ev].t < end / sfreq) onMessage({ type: "event", ...events[ev++] });
-        onMessage({ type: "data", t: pos / sfreq, samples: slice(pos, end) });
-        pos = end;
-      }
-      if (pos >= n) { onMessage({ type: "end", t: n / sfreq }); closed = true; return; }
-      timer = setTimeout(tick, 1000 / FRAMES_PER_SECOND);
-    };
-    tick();
-  })().catch((err) => { if (!closed) onError?.(err); });
-
-  return () => { closed = true; clearTimeout(timer); };
+/** Same shape as the backend's page_window, cut from the recorded excerpt. */
+export async function getPlaybackWindow(sessionId, { start = 0, duration = 10 } = {}) {
+  const key = await playbackFor(sessionId);
+  const [info, raw] = await Promise.all([getPlaybackInfo(sessionId), loadSamples(key)]);
+  const { sfreq, n_samples: n, scale } = info;
+  const dur = Math.min(Math.max(duration, 1), 60);
+  const s0 = Math.min(Math.max(start, 0), Math.max(0, n / sfreq - dur));
+  const i0 = Math.floor(s0 * sfreq), i1 = Math.min(n, Math.floor((s0 + dur) * sfreq));
+  const step = Math.max(1, Math.min(Math.ceil((i1 - i0) / TARGET_POINTS), Math.floor(sfreq / MIN_VIEW_SFREQ) || 1));
+  const data = info.channels.map((_, c) => {
+    const out = [];
+    for (let i = i0; i < i1; i += step) out.push(raw[c * n + i] / scale);
+    return out;
+  });
+  return {
+    start: s0, duration: dur, sfreq: sfreq / step, montage: "referential",
+    channels: info.channel_meta, data,
+    events: info.events.filter((e) => e.t >= s0 && e.t < s0 + dur),
+  };
 }

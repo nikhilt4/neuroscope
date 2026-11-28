@@ -1,18 +1,59 @@
+import { prettyLabel } from "../labels";
 /**
  * Step 3. Every field shows the dataset preset's value until the user changes it;
  * only changed values are sent (see the override pattern in CLAUDE.md section 7).
  * Moving on is done with the wizard footer's Continue button.
  */
+/**
+ * The user's own names for the classes. Sent as class_names (only names that differ
+ * from the data's), applied by the backend after preprocessing, so results, the confusion
+ * matrix and the "What you're classifying" box all use them. Matters most for uploads,
+ * whose events are often codes like "Stimulus/S  1".
+ */
+function ClassNamesCard({ classes, overrides, setOverrides }) {
+  if (!classes?.length) return null;
+  const names = overrides.class_names || {};
+  const rename = (cls, value) => setOverrides((prev) => {
+    const next = { ...(prev.class_names || {}) };
+    if (!value.trim() || value.trim() === cls) delete next[cls];
+    else next[cls] = value;
+    const out = { ...prev, class_names: next };
+    if (!Object.keys(next).length) delete out.class_names;   // override pattern: only send changes
+    return out;
+  });
+  return (
+    <div className="config-group cn-card">
+      <h4>Class names</h4>
+      <p className="config-hint">
+        Optional. Give the classes clearer names; results and charts will use them.
+      </p>
+      {classes.map((cls) => (
+        <div className="config-row" key={cls}>
+          <label title={cls}>{cls}</label>
+          <input type="text" value={names[cls] ?? ""} placeholder={prettyLabel(cls)}
+                 className={names[cls] ? "overridden" : ""}
+                 onChange={(e) => rename(cls, e.target.value)} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PreprocessSection({ mode, capabilities, preset, overrides, setOverrides }) {
   if (!mode) {
     return <p className="placeholder-text">Select a mode first.</p>;
   }
 
+  const classes = capabilities?.analysis_classes || capabilities?.event_classes;
+
   if (capabilities?.is_epochs) {
     return (
-      <div className="preset-banner">
-        This dataset arrives already filtered and split into trials by its source, so
-        preprocessing options don&apos;t apply. Continue to choose your decoders.
+      <div>
+        <div className="preset-banner">
+          This dataset arrives already filtered and split into trials by its source, so
+          preprocessing options don&apos;t apply. Continue to choose your decoders.
+        </div>
+        <div className="config-grid"><ClassNamesCard classes={classes} overrides={overrides} setOverrides={setOverrides} /></div>
       </div>
     );
   }
@@ -208,6 +249,8 @@ function PreprocessSection({ mode, capabilities, preset, overrides, setOverrides
             </select>
           </div>
         </div>
+
+        <ClassNamesCard classes={classes} overrides={overrides} setOverrides={setOverrides} />
       </div>
     </div>
   );

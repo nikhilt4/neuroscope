@@ -99,6 +99,36 @@ def prepare_epochs(data, config: dict, runs: Optional[list] = None) -> Tuple[mne
     return preprocess_raw(data, config), config
 
 
+def apply_class_names(epochs: mne.BaseEpochs, mapping: Optional[dict]) -> mne.BaseEpochs:
+    """
+    The user's own names for the classes ({"Stimulus/S  1": "target"}), applied to the
+    epochs AFTER preprocessing, so it works the same for raw files, pre-epoched data and
+    datasets whose preset already renamed events (eegbci's T1 -> left_hand: the user
+    renames "left_hand", the name they actually see).
+
+    Deliberately separate from annotation_rename: that one also limits the analysis to the
+    renamed classes, so renaming one class there would silently drop the others.
+
+    Unknown keys are ignored (a stale rename shouldn't break a run); blank names keep the
+    original. Two classes ending up with the same name would merge them silently, so that
+    is refused. MNE stores names in the plain `event_id` dict (no setter in 1.12), so a
+    copy with a new dict leaves the caller's epochs untouched.
+    """
+    if not mapping:
+        return epochs
+    new_ids = {}
+    for name, code in epochs.event_id.items():
+        target = str(mapping.get(name, "") or "").strip() or name
+        if target in new_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Two classes can\'t both be called "{target}". Give each class its own name.')
+        new_ids[target] = code
+    out = epochs.copy()
+    out.event_id = new_ids
+    return out
+
+
 def get_labels(epochs: mne.Epochs) -> Tuple[np.ndarray, list]:
     """
     Returns integer labels plus human-readable class names in matching order,

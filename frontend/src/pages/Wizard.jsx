@@ -142,7 +142,7 @@ function Wizard({ onExit, onGuide }) {
         // playback takes the full width: the traces need the room more than the summary does
         <div className="wz-layout wz-layout-full">
           <main className="wz-main">
-            <PlaybackView sessionId={readyData.session_id}
+            <PlaybackView sessionId={readyData.session_id} labelNames={preprocessOverrides.class_names || {}}
                           title={readyData.display_name || readyData.dataset_name || "Recording"}
                           onClose={() => setPlaybackOpen(false)} />
           </main>

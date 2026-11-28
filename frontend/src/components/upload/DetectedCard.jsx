@@ -1,6 +1,7 @@
 import ChannelMap from "../wizard/ChannelMap";
 import { Icon } from "../ui/Icons";
 import { MODE_LABELS, fmtDuration } from "../wizard/SummaryPanel";
+import { prettyLabel } from "../../labels";
 
 function Stat({ icon, tone, label, value }) {
   return (
@@ -20,7 +21,7 @@ function Stat({ icon, tone, label, value }) {
  */
 function DetectedCard({ data, onChange, onPlay }) {
   // v1 playback: continuous recordings from public datasets (backend/core/playback.py)
-  const canPlay = ["mne", "braindecode"].includes(data.source) && !data.is_epochs;
+  const canPlay = ["mne", "braindecode", "upload", "bids"].includes(data.source) && !data.is_epochs;
   const motor = data.motor_channels || {};
   // names the analysis will use, after the preset's renames (eegbci: T1/T2 -> left/right hand)
   const classes = data.analysis_classes ?? data.event_classes ?? [];
@@ -40,7 +41,7 @@ function DetectedCard({ data, onChange, onPlay }) {
         <div className="up-detected-actions">
           {canPlay && onPlay && (
             <button className="wz-btn up-play" onClick={onPlay}>
-              <svg viewBox="0 0 24 24" width="15"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>Play recording
+              <svg viewBox="0 0 24 24" width="15"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>View recording
             </button>
           )}
           <button className="up-link" onClick={onChange}>Use different data</button>
@@ -63,7 +64,7 @@ function DetectedCard({ data, onChange, onPlay }) {
               <h4>Classes to compare</h4>
               {classes.length ? (
                 <>
-                  <ul className="up-chips">{classes.map((c) => <li key={c}>{String(c).replace(/_/g, " ")}</li>)}</ul>
+                  <ul className="up-chips">{classes.map((c) => <li key={c}>{prettyLabel(c)}</li>)}</ul>
                   {renamed && (
                     <p className="up-muted"><Icon name="info" />From the recording&apos;s event markers {data.event_classes.join(", ")}, renamed by the dataset preset.</p>
                   )}

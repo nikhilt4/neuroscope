@@ -20,7 +20,8 @@ from backend.core.pipeline import reload_data
 from backend.core.preprocessor import _apply_bandpass, _apply_notch, _rename_annotations
 from backend.core.presets import get_preset, resolve_annotation_rename
 
-PLAYBACK_SOURCES = {"mne", "braindecode"}   # v1: public datasets that arrive as continuous raw
+# public datasets that arrive as continuous raw, plus the user's own continuous recordings
+PLAYBACK_SOURCES = {"mne", "braindecode", "upload", "bids"}
 FRAMES_PER_SECOND = 25                       # smooth scrolling without flooding the connection
 DISPLAY_FILTER = (0.5, 40.0)                 # used when the dataset preset has no filter edges
 MAX_DISPLAY_CHANNELS = 8
@@ -69,8 +70,7 @@ def load_for_playback(session: dict) -> mne.io.BaseRaw:
     if session.get("source") not in PLAYBACK_SOURCES:
         raise HTTPException(
             status_code=400,
-            detail="Playback currently supports public datasets from MNE and braindecode. "
-                   "Uploaded files are coming later.")
+            detail="Playback supports uploaded recordings and public datasets from MNE and braindecode.")
     data = reload_data(session)
     if isinstance(data, mne.BaseEpochs):
         raise HTTPException(
@@ -79,7 +79,13 @@ def load_for_playback(session: dict) -> mne.io.BaseRaw:
                    "recording to play back. For BCI Competition IV 2a, use the braindecode "
                    "version, which is continuous.")
 
-    raw = data.copy().pick("eeg")
+    # EEG plus the eye and heart channels clinicians read alongside it (her reference
+    # screenshot shows ECG under the EEG). EMG/respiration stay out: Sleep-EDF stores
+    # some at 1 Hz, which would draw as flat lines after upsampling.
+    picks = mne.pick_types(data.info, eeg=True, eog=True, ecg=True)
+    if not len(picks):
+        raise HTTPException(status_code=400, detail="This recording has no EEG channels to display.")
+    raw = data.copy().pick(picks)
     preset = get_preset(session.get("dataset_name"), "motor_imagery")
     if preset.get("annotation_rename"):
         try:
@@ -200,3 +206,141 @@ def stream_frames(raw: mne.io.BaseRaw, channels: Optional[List[str]] = None, sta
             if delay > 0:
                 time.sleep(delay)
     yield sse({"type": "end", "t": n_total / sfreq})
+
+
+# ── Page viewer ─────────────────────────────────────────────────────────────────
+# A clinical-style page: every channel stacked, one window of time at a time, fetched on
+# demand instead of streamed frame by frame (a neuroscientist found the video-style replay
+# slow and asked for a scrollable sheet like a clinical EEG reader).
+
+MAX_PAGE_S = 60.0
+MAX_PAGE_CHANNELS = 64
+# Points per channel per page the browser needs: a page is ~1,300 px wide, so ~2 points
+# per pixel is plenty. Decimation never goes below MIN_VIEW_SFREQ, which stays above twice
+# the 40 Hz display low-pass, so striding can't alias what's on screen.
+TARGET_POINTS = 2600
+MIN_VIEW_SFREQ = 100.0
+
+# Longitudinal bipolar ("double banana"), ordered as in the AP montage clinicians showed us:
+# right parasagittal, left parasagittal, right temporal, left temporal, midline.
+# https://www.acns.org/UserFiles/file/Guideline6-RecommendedMontagesforUseinClinicalEEG.pdf
+# (ACNS Guideline 6; UNVERIFIED exact ordering against the PDF — matches common practice).
+DOUBLE_BANANA = [
+    ("Fp2", "F4"), ("F4", "C4"), ("C4", "P4"), ("P4", "O2"),
+    ("Fp1", "F3"), ("F3", "C3"), ("C3", "P3"), ("P3", "O1"),
+    ("Fp2", "F8"), ("F8", "T8"), ("T8", "P8"), ("P8", "O2"),
+    ("Fp1", "F7"), ("F7", "T7"), ("T7", "P7"), ("P7", "O1"),
+    ("Fz", "Cz"), ("Cz", "Pz"),
+]
+# 10-20 names changed in the 10-10 system (T3 -> T7 etc.); accept either in a recording
+OLD_NAMES = {"t7": "t3", "t8": "t4", "p7": "t5", "p8": "t6"}
+MIN_BIPOLAR_PAIRS = 4
+
+
+def _hemisphere(name: str) -> str:
+    """left / right / midline from a 10-20 name: odd = left, even = right, z = midline."""
+    first = name.split("-")[0].strip()
+    if first[-1:].lower() == "z":
+        return "midline"
+    digits = "".join(ch for ch in first if ch.isdigit())
+    if not digits:
+        return "midline"
+    return "left" if int(digits) % 2 else "right"
+
+
+def _find(name: str, lower_map: dict) -> Optional[str]:
+    key = name.lower()
+    return lower_map.get(key) or lower_map.get(OLD_NAMES.get(key, ""))
+
+
+def _bipolar_pairs(raw: mne.io.BaseRaw) -> List[tuple]:
+    eeg = [raw.ch_names[i] for i in mne.pick_types(raw.info, eeg=True)]
+    lower = {c.lower(): c for c in eeg}
+    pairs = []
+    for a, b in DOUBLE_BANANA:
+        ca, cb = _find(a, lower), _find(b, lower)
+        if ca and cb:
+            pairs.append((ca, cb))
+    return pairs
+
+
+def available_montages(raw: mne.io.BaseRaw) -> List[str]:
+    out = ["referential"]
+    if len(mne.pick_types(raw.info, eeg=True)) >= 3:
+        out.append("average")   # average of 2 channels is meaningless
+    if len(_bipolar_pairs(raw)) >= MIN_BIPOLAR_PAIRS:
+        out.append("bipolar")
+    return out
+
+
+def channel_meta(raw: mne.io.BaseRaw) -> List[dict]:
+    types = raw.get_channel_types()
+    return [{"name": n, "type": t, "group": _hemisphere(n) if t == "eeg" else t}
+            for n, t in zip(raw.ch_names, types)]
+
+
+def viewer_info(raw: mne.io.BaseRaw) -> dict:
+    """playback_info plus what the page viewer needs: channel types/groups and montages."""
+    return {**playback_info(raw), "channel_meta": channel_meta(raw),
+            "montages": available_montages(raw), "max_page_s": MAX_PAGE_S}
+
+
+def page_window(raw: mne.io.BaseRaw, start: float, duration: float, montage: str = "referential",
+                channels: Optional[List[str]] = None) -> dict:
+    """
+    One page of the recording, in µV, with the montage applied and the events inside it.
+
+    Montages:
+      referential — channels as recorded;
+      average     — each EEG channel minus the mean of all EEG channels (non-EEG unchanged);
+      bipolar     — longitudinal "double banana" differences (Fp1-F3, …) for every pair whose
+                    two electrodes exist, followed by any EOG/ECG channels.
+    `channels` (names in the montage's output) limits what is returned; None = all, capped.
+    """
+    if montage not in available_montages(raw):
+        raise HTTPException(status_code=400,
+                            detail=f"The {montage} montage isn't available for this recording.")
+    sfreq = float(raw.info["sfreq"])
+    total = raw.n_times / sfreq
+    duration = float(min(max(duration, 1.0), MAX_PAGE_S))
+    start = float(min(max(start, 0.0), max(0.0, total - duration)))
+    i0, i1 = int(start * sfreq), min(raw.n_times, int((start + duration) * sfreq))
+
+    data = raw.get_data(start=i0, stop=i1) * 1e6
+    types = raw.get_channel_types()
+    eeg_idx = [i for i, t in enumerate(types) if t == "eeg"]
+    other_idx = [i for i, t in enumerate(types) if t != "eeg"]
+
+    if montage == "bipolar":
+        index = {n: i for i, n in enumerate(raw.ch_names)}
+        pairs = _bipolar_pairs(raw)
+        rows = [data[index[a]] - data[index[b]] for a, b in pairs]
+        names = [f"{a}-{b}" for a, b in pairs]
+        meta = [{"name": n, "type": "eeg", "group": _hemisphere(n)} for n in names]
+        rows += [data[i] for i in other_idx]
+        meta += [channel_meta(raw)[i] for i in other_idx]
+        out = np.array(rows) if rows else np.empty((0, data.shape[1]))
+    else:
+        out = data.copy()
+        if montage == "average" and eeg_idx:
+            out[eeg_idx] -= out[eeg_idx].mean(axis=0, keepdims=True)
+        meta = channel_meta(raw)
+
+    if channels:
+        keep = [i for i, m in enumerate(meta) if m["name"] in set(channels)]
+        if not keep:
+            raise HTTPException(status_code=400, detail="None of the requested channels are in this montage.")
+    else:
+        keep = list(range(min(len(meta), MAX_PAGE_CHANNELS)))
+    out, meta = out[keep], [meta[i] for i in keep]
+
+    # stride decimation, never below MIN_VIEW_SFREQ (see TARGET_POINTS)
+    step = max(1, min(int(np.ceil(out.shape[1] / TARGET_POINTS)), int(sfreq // MIN_VIEW_SFREQ) or 1))
+    out = out[:, ::step]
+    events = [e for e in event_list(raw) if start <= e["t"] < start + duration]
+    return {
+        "start": start, "duration": duration, "sfreq": sfreq / step, "montage": montage,
+        "channels": meta, "events": events,
+        # 1 decimal µV: far below what a pixel shows, and keeps a 22-channel page ~300 KB
+        "data": np.round(out, 1).tolist(),
+    }

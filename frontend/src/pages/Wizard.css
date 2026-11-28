@@ -241,3 +241,6 @@
 
 /* online demo notes (src/demo/DemoNote.jsx) */
 .demo-note a { color: inherit; font-weight: 600; }
+
+/* EEG viewer: one full-width column (no summary panel); a clinical page wants the width */
+.wz-layout.wz-layout-full { grid-template-columns: minmax(0, 1fr); width: min(1640px, calc(100% - 24px)); }

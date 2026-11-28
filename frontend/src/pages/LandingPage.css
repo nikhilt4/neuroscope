@@ -280,3 +280,10 @@ circle.hm-outline { stroke: #c7d2fe; }
 /* the two nav buttons share one width, and labels never wrap (phones squeezed "Try it free" onto two lines) */
 .lp-btn { white-space: nowrap; }
 .lp-nav .lp-btn { min-width: 104px; }
+
+/* "How it works" strip: informational, so no hover lift or button-like affordance */
+.lp-steps-label { position: relative; z-index: 2; margin: 56px 0 0; font: 600 0.75rem var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+.lp-steps { margin-top: 14px; }
+.lp-steps li { cursor: default; box-shadow: none; background: rgba(255, 255, 255, 0.45); }
+.lp-steps li:hover { transform: none; box-shadow: none; }
+.lp-step-num { margin-right: 6px; color: var(--primary); font-family: var(--mono); }

@@ -9,12 +9,13 @@ import { DEMO } from "../demo/config";
 const Svg = ({ name }) => <Icon name={name} />;
 const Logo = () => <LogoMark className="lp-logo" />;
 
+// "How it works", not buttons: a tester kept clicking "Upload" here expecting it to start the app
 const STEPS = [
-  { icon: "upload", title: "Upload", desc: "EDF, BDF, FIF, BIDS or a public dataset" },
-  { icon: "detect", title: "Detect", desc: "Channels, montage and events, found for you" },
-  { icon: "filter", title: "Preprocess", desc: "Published presets, every value editable" },
-  { icon: "classify", title: "Classify", desc: "14 models, leakage-safe CV" },
-  { icon: "results", title: "Results", desc: "Compare, visualise and export" },
+  { icon: "database", title: "Load data", desc: "A public dataset or your own file" },
+  { icon: "detect", title: "Check it", desc: "Channels and events found for you" },
+  { icon: "filter", title: "Clean it", desc: "Filters set from published methods" },
+  { icon: "classify", title: "Train models", desc: "Up to 14, all tested the same way" },
+  { icon: "results", title: "Compare", desc: "Accuracy, charts and scalp maps" },
 ];
 
 const FEATURES = [
@@ -136,25 +137,14 @@ function LandingPage({ onStart, onGuide }) {
           <p className="lp-eyebrow"><span className="lp-dot" />Free EEG analysis &amp; BCI platform{DEMO && <> · online demo</>}</p>
           <h1 className="lp-title">NeuroScope</h1>
           <p className="lp-tagline">
-            Every EEG format. Fourteen models.<br />
-            <span className="lp-grad">One fair comparison.</span>
+            Analyse brainwave data and train machine-learning models on it.<br />
+            <span className="lp-grad">Free, in your browser, no code.</span>
           </p>
           <p className="lp-lede">
-            Turn raw brainwaves into answers. Load a recording or a public dataset, and NeuroScope cleans it,
-            trains 14 machine-learning models and shows you which one reads the brain best, with accuracy,
-            confusion matrices and scalp maps to back it up.
+            Pick a public EEG dataset or upload a recording. NeuroScope cleans it, trains up to 14 models, and
+            shows which one best tells the brain states apart, such as imagined left vs right hand movements.
           </p>
         </div>
-
-        <ol className="lp-steps">
-          {STEPS.map((s, i) => (
-            <li key={s.title} style={{ "--d": `${i * 70}ms` }}>
-              <span className="lp-step-icon"><Svg name={s.icon} /></span>
-              <b>{s.title}</b>
-              <span>{s.desc}</span>
-            </li>
-          ))}
-        </ol>
 
         <div className="lp-ctas">
           <button className="lp-btn lp-btn-lg" onClick={onStart}>
@@ -163,7 +153,18 @@ function LandingPage({ onStart, onGuide }) {
           </button>
           <a className="lp-btn lp-btn-ghost lp-btn-lg" href="#preview" onClick={go("preview")}>See real results</a>
         </div>
-        <p className="lp-trust">Free · No code · No install · Real results, not mock-ups</p>
+
+        <p className="lp-steps-label">How it works</p>
+
+        <ol className="lp-steps">
+          {STEPS.map((s, i) => (
+            <li key={s.title} style={{ "--d": `${i * 70}ms` }}>
+              <span className="lp-step-icon"><Svg name={s.icon} /></span>
+              <b><span className="lp-step-num">{i + 1}</span>{s.title}</b>
+              <span>{s.desc}</span>
+            </li>
+          ))}
+        </ol>
       </section>
 
       <section className="lp-features">

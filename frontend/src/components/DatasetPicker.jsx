@@ -3,6 +3,7 @@ import * as api from "../api";
 import BidsSelector from "./BidsSelector";
 import { Icon } from "./ui/Icons";
 import { DEMO } from "../demo/config";
+import { prettyLabel } from "../labels";
 
 const SOURCES = [
   { id: "mne", label: "MNE", hint: "Reference datasets bundled with MNE-Python" },
@@ -32,8 +33,6 @@ const DATASET_NOTES = {
 // the demo recorded one MNE and one MOABB dataset; braindecode would be an empty tab
 const VISIBLE_SOURCES = DEMO ? SOURCES.filter((s) => s.id !== "braindecode") : SOURCES;
 
-const TASK_LABELS = { motor_imagery: "Motor imagery", spectral: "Spectral / sleep", erp: "ERP", ssvep: "SSVEP" };
-const SPEED_LABEL = { fast: "Fast", medium: "Medium", slow: "Slow" };
 
 function DatasetPicker({ onReady }) {
   const [source, setSource] = useState("moabb");
@@ -127,10 +126,10 @@ function DatasetPicker({ onReady }) {
                   {active && <span className="dp-check"><Icon name="check" /></span>}
                 </div>
                 <div className="dp-card-tags">
-                  {ds.task && <span className="dp-tag">{TASK_LABELS[ds.task] || ds.task}</span>}
                   {n.size && (
                     <span className={`dp-size dp-${n.speed}`} title={n.measured ? "Measured download size" : "Estimated size"}>
-                      {n.size}{!n.measured && " est."} · {SPEED_LABEL[n.speed]}
+                      {/* colour still shows download speed; the word was one label too many */}
+                      {n.size}{!n.measured && " est."}
                     </span>
                   )}
                 </div>
@@ -141,7 +140,7 @@ function DatasetPicker({ onReady }) {
                   {ds.sampling_rate && <span><Icon name="bolt" />{ds.sampling_rate} Hz</span>}
                 </div>
                 {ds.classes && (
-                  <ul className="dp-classes">{ds.classes.map((c) => <li key={c}>{c.replace(/_/g, " ")}</li>)}</ul>
+                  <ul className="dp-classes">{ds.classes.map((c) => <li key={c}>{prettyLabel(c)}</li>)}</ul>
                 )}
               </button>
             );

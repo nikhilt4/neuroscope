@@ -15,7 +15,7 @@ const SECTIONS = [
   { id: "classify", title: "Decoders" },
   { id: "evaluation", title: "Evaluation" },
   { id: "results", title: "Reading the results" },
-  { id: "playback", title: "Playback" },
+  { id: "playback", title: "Viewing a recording" },
   { id: "notes", title: "Good to know" },
 ];
 
@@ -192,14 +192,16 @@ function GuidePage({ onBack, onStart, backLabel = "Back" }) {
 
           {/* ── playback ── */}
           <section id="playback" className="gd-section">
-            <h2>Playback</h2>
-            <p>After loading a continuous recording from a public dataset, press <b>Play recording</b> on the Data loaded card to replay it in real time, as if it were coming off a headset.</p>
+            <h2>Viewing a recording</h2>
+            <p>After loading a continuous recording, from a public dataset or your own file, press <b>View recording</b> on the Data loaded card. It opens as a page of EEG, laid out like a clinical EEG reader.</p>
             <dl className="gd-terms">
-              <Term name="Traces">Up to 8 channels, motor-cortex channels first. Choose others in the Channels panel.</Term>
-              <Term name="Event markers">Coloured lines with labels where each event happens (e.g. <i>left hand</i>, or a sleep stage starting). The timeline shows every event as a tick.</Term>
-              <Term name="Controls">Play/pause, speed (0.5× to 4×), seek by dragging, scrolling or arrow keys, and trace size (µV).</Term>
+              <Term name="The page">Every channel stacked, coloured by side of the head (left blue, right red, midline dark; eye and heart channels in their own colours), with a line every second.</Term>
+              <Term name="Montage">Referential (as recorded), average reference, or bipolar &quot;double banana&quot; (Fp1-F3, F3-C3…) when the standard electrodes are present.</Term>
+              <Term name="Moving through it">Scroll or drag the page, use ← → (1 s) and Shift+← → (one page), the buttons under the page, or the position bar. Page length is 5 to 30 s.</Term>
+              <Term name="Events">Drawn on the page where they happen (e.g. <i>left hand</i>, or a sleep stage). Click any event in the list, or use Previous / Next, to jump straight to it. Click a label to list only that kind.</Term>
+              <Term name="Play">Optional: scrolls the page automatically at 1× to 10×. Space starts and stops it.</Term>
             </dl>
-            <p>Datasets that arrive already cut into trials (the MOABB versions, LIMO, kiloword) can&apos;t be played back. For BCI Competition IV 2a, use the braindecode version, which is continuous.</p>
+            <p>Datasets that arrive already cut into trials (the MOABB versions, LIMO, kiloword) can&apos;t be viewed this way. For BCI Competition IV 2a, use the braindecode version, which is continuous.</p>
           </section>
 
           {/* ── notes ── */}
@@ -211,7 +213,7 @@ function GuidePage({ onBack, onStart, backLabel = "Back" }) {
               <li><b>Small differences aren&apos;t meaningful.</b> With few trials per fold, one trial can move accuracy by several points. Gaps smaller than the ± spread are noise.</li>
               <li><b>Some labels are exploratory.</b> kiloword is split into abstract and concrete words at the median rating, a choice made by this app rather than the dataset&apos;s authors. LIMO&apos;s face A vs face B scores at chance in every mode.</li>
               <li><b>Long jobs time out.</b> Fetches stop after 10 minutes, analyses after 30 (60 for multi-subject runs).</li>
-              <li><b>Uploaded files</b> are analysed as a single recording; multi-subject evaluation and playback are for public datasets for now.</li>
+              <li><b>Uploaded files</b> are analysed as a single recording; multi-subject evaluation is for public datasets. You can rename an upload&apos;s classes (e.g. <i>Stimulus/S 1</i> to <i>target</i>) in the Preprocess step.</li>
             </ul>
             <div className="gd-cta">
               <h3>Ready to try it?</h3>

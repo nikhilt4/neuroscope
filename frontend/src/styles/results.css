@@ -104,3 +104,9 @@ button.rp-bar-row.is-selected .rp-bar-name { color: var(--primary); font-weight:
 .rp-grid-subj tbody th { text-transform: none; font: 600 0.78rem var(--mono); color: var(--ink-2); letter-spacing: 0; }
 .rp-grid-mean { font-weight: 700; background: #fafbfe; white-space: nowrap; }
 .rp-eval-badge { padding: 4px 10px; border-radius: 999px; font: 600 0.74rem var(--mono); color: #6d28d9; background: #ede9fe; }
+
+/* "What you're classifying" — plain-language context above the scores */
+.rp-task { padding: 16px 18px; border-radius: 14px; background: #f5f6ff; border: 1px solid var(--line); }
+.rp-task h4 { margin: 0 0 8px; font-size: 0.95rem; color: var(--ink); }
+.rp-task p { margin: 6px 0 0; font-size: 0.88rem; line-height: 1.6; color: var(--ink-2); }
+.rp-task b { color: var(--ink); }

@@ -86,6 +86,8 @@ class PreprocessingConfig(BaseModel):
     include_events: Optional[List[str]] = None
     montage: Optional[str] = None
     picks: Optional[str] = None
+    # the user's own class names, {"Stimulus/S  1": "target"} — see pipeline.apply_class_names
+    class_names: Optional[Dict[str, str]] = None
 
 
 class ClassifierConfig(BaseModel):

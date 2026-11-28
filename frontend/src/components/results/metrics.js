@@ -4,11 +4,10 @@
  * identical numbers for identical input.
  */
 
-/** "left_hand" -> "Left hand" */
-export const prettyClass = (c) => {
-  const s = String(c).replace(/_/g, " ");
-  return s.charAt(0).toUpperCase() + s.slice(1);
-};
+import { prettyLabel } from "../../labels";
+
+/** "left_hand" -> "Left hand"; one naming rule for the whole app (labels.js) */
+export const prettyClass = prettyLabel;
 
 export const FAMILY = { feature: "classical", epoch: "riemannian", deep: "deep" };
 

@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from backend.models import AnalysisRequest
 from backend.utils.session_registry import get_session
 from backend.core.presets import get_preset
-from backend.core.pipeline import reload_data, prepare_epochs, get_labels
+from backend.core.pipeline import apply_class_names, reload_data, prepare_epochs, get_labels
 from backend.core.features import extract_features, FREQUENCY_BANDS
 from backend.core.classifiers import run_all_classifiers
 from backend.core.visualizer import spectral_summary
@@ -96,6 +96,7 @@ def run_analysis(request: AnalysisRequest, progress: Optional[Callable[[str], No
 
     say("Preprocessing")
     epochs, config = prepare_epochs(data, config, runs=session.get("runs"))
+    epochs = apply_class_names(epochs, config.get("class_names"))
     y, class_names, class_counts = get_labels(epochs)
 
     if len(set(y.tolist())) < 2:

@@ -490,8 +490,34 @@ the subject — **keep it that way**.
       in 3.0 s wall-clock (connection setup included).
     - NOT screenshot-verified: headless Chrome can't capture a page with an open stream (virtual
       time never settles). Check in a real browser.
-    - Next: uploaded files (continuous EDF/BDF/FIF/BIDS), then live decoding on the same stream
-      (train on early trials, classify each trial as its window completes).
+    - **Replaced in the UI by the page viewer (28 Nov 2026)** after a neuroscientist found the
+      video-style replay slow and asked for a clinical-style scrollable sheet:
+      - `GET /playback/{sid}/window?start=&duration=&montage=&channels=` (`page_window`): one page,
+        all channels (≤64), µV, its events. Stride decimation to ~2,600 points/channel, never below
+        100 Hz (above 2× the 40 Hz display low-pass). `info` now also returns `channel_meta`
+        (type + hemisphere: odd = left, even = right, z = midline) and `montages`.
+      - Montages: referential; average (≥3 EEG); bipolar "double banana" (ACNS-style order, old
+        T3/T4/T5/T6 names accepted, needs ≥4 pairs). eegbci gets all three; BNCI's 22 central
+        channels only referential/average; Sleep-EDF (already bipolar) referential only.
+      - Loads EEG + EOG + ECG (not EMG: Sleep-EDF stores some at 1 Hz). **Uploads and BIDS now
+        play** (continuous only).
+      - UI (`PlaybackView.jsx`, now the viewer): stacked channels coloured by side, 1-s grid,
+        events drawn on the page, scale bar, 5–30 s pages, wheel/drag/arrow keys/paging buttons,
+        event list with click-to-jump + Previous/Next + filter by label, channel hide/show,
+        Play = auto-scroll 1–10×. Full-width layout (`.wz-layout-full` finally styled). Demo
+        cuts pages from the recorded excerpt client-side (`demoApi.getPlaybackWindow`).
+      - The SSE `/stream` endpoint stays for future live streaming/decoding; the frontend no longer
+        uses it (`openPlayback` removed from api.js/demoApi.js).
+      - Tests: `test_viewer.py` (bipolar arithmetic + order, old names, average ref, groups,
+        window/events/clamping, decimation floor, channel selection, uploads with EEG/EOG/ECG).
+        Browser-checked on eegbci (18 bipolar channels), Sleep-EDF (incl. EOG) and the demo.
+    - Next: live decoding / hardware streaming on the SSE stream (see section 11 deployment notes).
+    - **Class names (28 Nov):** `PreprocessingConfig.class_names` → `pipeline.apply_class_names`,
+      applied to the epochs after preprocessing (works for raw, pre-epoched and preset-renamed
+      data; duplicate names refused). UI: "Class names" card in Preprocess (also shown for
+      pre-epoched data). Display names for common codes in `frontend/src/labels.js`
+      (`wake` → "Wake", `N3` → "N3 (deep sleep)"…); `metrics.prettyClass` now delegates to it.
+      Tests: `test_class_names.py`.
 12. **PDF report**, info/manual page, deploy.
 
 ---

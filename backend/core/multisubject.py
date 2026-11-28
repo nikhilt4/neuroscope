@@ -23,7 +23,7 @@ from fastapi import HTTPException
 
 from backend.core.classifiers import run_all_classifiers
 from backend.core.features import FREQUENCY_BANDS, extract_features
-from backend.core.pipeline import get_labels, prepare_epochs, reload_data
+from backend.core.pipeline import apply_class_names, get_labels, prepare_epochs, reload_data
 from backend.core.presets import get_preset
 from backend.core.visualizer import spectral_summary
 
@@ -52,7 +52,7 @@ def _load_subject(request, session, subject: int):
     preset = get_preset(session.get("dataset_name"), request.mode, task=session.get("task"))
     overrides = request.preprocessing.model_dump(exclude_unset=True) if request.preprocessing else {}
     epochs, config = prepare_epochs(data, {**preset, **overrides}, runs=session.get("runs"))
-    return data, epochs, config
+    return data, apply_class_names(epochs, config.get("class_names")), config
 
 
 def _code_to_name(epochs: mne.BaseEpochs) -> dict:

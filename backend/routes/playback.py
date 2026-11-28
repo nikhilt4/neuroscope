@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from backend.core.playback import load_for_playback_cached, playback_info, stream_frames
+from backend.core.playback import load_for_playback_cached, page_window, stream_frames, viewer_info
 from backend.utils.session_registry import get_session
 
 router = APIRouter(prefix="/playback", tags=["playback"])
@@ -16,7 +16,21 @@ router = APIRouter(prefix="/playback", tags=["playback"])
 
 @router.get("/{session_id}/info")
 def info(session_id: str):
-    return playback_info(load_for_playback_cached(get_session(session_id)))
+    """Recording info: channels (with type and hemisphere), events, montages, duration."""
+    return viewer_info(load_for_playback_cached(get_session(session_id)))
+
+
+@router.get("/{session_id}/window")
+def window(session_id: str, start: float = 0.0, duration: float = 10.0, montage: str = "referential",
+           channels: Optional[str] = None):
+    """
+    One page for the clinical-style viewer: every channel (or `channels`, comma-separated,
+    named as in the montage) from `start` for `duration` seconds, in µV, plus its events.
+    The viewer fetches pages as you scroll; Play is just advancing the page.
+    """
+    raw = load_for_playback_cached(get_session(session_id))
+    chans = [c for c in channels.split(",") if c] if channels else None
+    return page_window(raw, start, duration, montage=montage, channels=chans)
 
 
 @router.get("/{session_id}/stream")
